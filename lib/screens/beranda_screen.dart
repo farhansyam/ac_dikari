@@ -2,6 +2,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
 
+// ─── Feature Flags ───────────────────────────────────────────────
+// Ganti false → true untuk mengaktifkan fitur
+const bool _showDikariPay = false;
+const bool _showWeatherCard = true;
+// ─────────────────────────────────────────────────────────────────
+
 class BerandaScreen extends StatelessWidget {
   const BerandaScreen({Key? key}) : super(key: key);
 
@@ -23,8 +29,19 @@ class BerandaScreen extends StatelessWidget {
           children: [
             _buildGreeting(context),
             const SizedBox(height: 16),
-            _buildWalletCard(context),
-            const SizedBox(height: 24),
+
+            // DikariPay — hidden sampai fitur aktif
+            if (_showDikariPay) ...[
+              _buildWalletCard(context),
+              const SizedBox(height: 24),
+            ],
+
+            // Kartu Cuaca
+            if (_showWeatherCard) ...[
+              _buildWeatherCard(context),
+              const SizedBox(height: 24),
+            ],
+
             _buildServiceGrid(context),
             const SizedBox(height: 24),
             _buildPromoCarousel(context),
@@ -149,6 +166,7 @@ class BerandaScreen extends StatelessWidget {
     );
   }
 
+  // ─── DikariPay Card (hidden) ──────────────────────────────────
   Widget _buildWalletCard(BuildContext context) {
     return Container(
       width: double.infinity,
@@ -226,6 +244,213 @@ class BerandaScreen extends StatelessWidget {
     );
   }
 
+  // ─── Weather Card ─────────────────────────────────────────────
+  Widget _buildWeatherCard(BuildContext context) {
+    // Data dummy — nanti bisa diganti dengan API cuaca
+    const double temperature = 34;
+    const String condition = 'Cerah Berawan';
+    const String humidity = '78%';
+    const String windSpeed = '12 km/h';
+    const bool isHotWeather = temperature >= 32;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24.0),
+        gradient: LinearGradient(
+          colors: isHotWeather
+              ? [const Color(0xFFFF6B35), const Color(0xFFFF8E53)]
+              : [const Color(0xFF42B4F5), const Color(0xFF1A8FD1)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color:
+                (isHotWeather
+                        ? const Color(0xFFFF6B35)
+                        : const Color(0xFF42B4F5))
+                    .withOpacity(0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Baris atas: suhu + ikon cuaca
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Cuaca Sekarang',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 11,
+                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${temperature.toInt()}°',
+                        style: Theme.of(context).textTheme.headlineLarge
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 52,
+                              height: 1,
+                            ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'C',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                color: Colors.white.withOpacity(0.8),
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    condition,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withOpacity(0.9),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              // Ikon besar cuaca
+              Text(
+                isHotWeather ? '☀️' : '⛅',
+                style: const TextStyle(fontSize: 64),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Detail cuaca kecil
+          Row(
+            children: [
+              _buildWeatherDetail(
+                context,
+                Icons.water_drop_rounded,
+                humidity,
+                'Kelembaban',
+              ),
+              const SizedBox(width: 20),
+              _buildWeatherDetail(
+                context,
+                Icons.air_rounded,
+                windSpeed,
+                'Angin',
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Rekomendasi banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                const Text('🧊', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isHotWeather
+                        ? 'Suhu panas! Waktunya cuci AC biar makin dingin.'
+                        : 'Cuaca sejuk, tapi AC tetap perlu dirawat rutin.',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Pesan',
+                    style: TextStyle(
+                      color: isHotWeather
+                          ? const Color(0xFFFF6B35)
+                          : AppTheme.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeatherDetail(
+    BuildContext context,
+    IconData icon,
+    String value,
+    String label,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white.withOpacity(0.8), size: 16),
+        const SizedBox(width: 4),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ─── Service Grid ─────────────────────────────────────────────
   Widget _buildServiceGrid(BuildContext context) {
     final services = [
       {
@@ -271,7 +496,7 @@ class BerandaScreen extends StatelessWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
         color: AppTheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(24.0),
@@ -283,54 +508,67 @@ class BerandaScreen extends StatelessWidget {
           ),
         ],
       ),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          mainAxisSpacing: 24,
-          crossAxisSpacing: 8,
-          childAspectRatio: 0.75,
-        ),
-        itemCount: services.length,
-        itemBuilder: (context, index) {
-          final service = services[index];
-          final Color iconColor = service['color'] as Color;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16.0),
-                ),
-                child: Icon(
-                  service['icon'] as IconData,
-                  color: iconColor,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                service['title'] as String,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppTheme.onSurfaceVariant,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          );
-        },
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: services
+                .sublist(0, 4)
+                .map((s) => _buildServiceItem(context, s))
+                .toList(),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: services
+                .sublist(4, 8)
+                .map((s) => _buildServiceItem(context, s))
+                .toList(),
+          ),
+        ],
       ),
     );
   }
 
+  Widget _buildServiceItem(BuildContext context, Map<String, Object> service) {
+    final Color iconColor = service['color'] as Color;
+    return SizedBox(
+      width: 72,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(14.0),
+            ),
+            child: Icon(
+              service['icon'] as IconData,
+              color: iconColor,
+              size: 26,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            service['title'] as String,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppTheme.onSurfaceVariant,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              height: 1.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Promo Carousel ───────────────────────────────────────────
   Widget _buildPromoCarousel(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -464,6 +702,7 @@ class BerandaScreen extends StatelessWidget {
     );
   }
 
+  // ─── Testimonials ─────────────────────────────────────────────
   Widget _buildTestimonials(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
