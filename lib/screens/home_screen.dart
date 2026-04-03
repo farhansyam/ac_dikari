@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import 'beranda_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -16,7 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const BerandaScreen(),
     const _PlaceholderScreen(label: 'Pesanan'),
     const _PlaceholderScreen(label: 'Riwayat'),
-    const _PlaceholderScreen(label: 'Profil'),
+    const ProfileScreen(), // ← ganti dari placeholder
   ];
 
   @override

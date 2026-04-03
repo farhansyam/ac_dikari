@@ -1,15 +1,109 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:provider/provider.dart';
 import '../core/theme.dart';
+import '../services/auth_service.dart';
 
 // ─── Feature Flags ───────────────────────────────────────────────
-// Ganti false → true untuk mengaktifkan fitur
 const bool _showDikariPay = false;
 const bool _showWeatherCard = true;
 // ─────────────────────────────────────────────────────────────────
 
-class BerandaScreen extends StatelessWidget {
+class BerandaScreen extends StatefulWidget {
   const BerandaScreen({Key? key}) : super(key: key);
+
+  @override
+  State<BerandaScreen> createState() => _BerandaScreenState();
+}
+
+class _BerandaScreenState extends State<BerandaScreen> {
+  String _lokasi = 'Memuat lokasi...';
+  bool _loadingLokasi = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _getLocation();
+  }
+
+  Future<void> _getLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        setState(() {
+          _lokasi = 'GPS tidak aktif';
+          _loadingLokasi = false;
+        });
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (!mounted) return;
+          setState(() {
+            _lokasi = 'Izin lokasi ditolak';
+            _loadingLokasi = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        setState(() {
+          _lokasi = 'Izin lokasi diblokir';
+          _loadingLokasi = false;
+        });
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (!mounted) return;
+
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks.first;
+        String subLocality = place.subLocality ?? '';
+        String locality = place.locality ?? '';
+        String hasil = [
+          subLocality,
+          locality,
+        ].where((s) => s.isNotEmpty).join(', ');
+
+        setState(() {
+          _lokasi = hasil.isNotEmpty ? hasil : 'Lokasi ditemukan';
+          _loadingLokasi = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _lokasi = 'Gagal mendapat lokasi';
+        _loadingLokasi = false;
+      });
+    }
+  }
+
+  void _requireLogin(BuildContext context, VoidCallback action) {
+    final auth = context.read<AuthService>();
+    if (!auth.isLoggedIn) {
+      Navigator.of(context).pushNamed('/login');
+    } else {
+      action();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +114,7 @@ class BerandaScreen extends StatelessWidget {
       body: SingleChildScrollView(
         padding: const EdgeInsets.only(
           top: 100,
-          bottom: 100,
+          bottom: 32,
           left: 16,
           right: 16,
         ),
@@ -30,13 +124,11 @@ class BerandaScreen extends StatelessWidget {
             _buildGreeting(context),
             const SizedBox(height: 16),
 
-            // DikariPay — hidden sampai fitur aktif
             if (_showDikariPay) ...[
               _buildWalletCard(context),
               const SizedBox(height: 24),
             ],
 
-            // Kartu Cuaca
             if (_showWeatherCard) ...[
               _buildWeatherCard(context),
               const SizedBox(height: 24),
@@ -50,17 +142,10 @@ class BerandaScreen extends StatelessWidget {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: AppTheme.secondary,
-        foregroundColor: Colors.white,
-        shape: const CircleBorder(),
-        elevation: 8,
-        child: const Icon(Icons.chat_bubble_rounded),
-      ),
     );
   }
 
+  // ─── AppBar ───────────────────────────────────────────────────
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return PreferredSize(
       preferredSize: const Size.fromHeight(64.0),
@@ -79,11 +164,30 @@ class BerandaScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(
-                      Icons.location_on_rounded,
-                      color: AppTheme.primary,
-                      size: 28,
-                    ),
+                    _loadingLokasi
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: AppTheme.primary,
+                            ),
+                          )
+                        : GestureDetector(
+                            onTap: () {
+                              if (!mounted) return;
+                              setState(() {
+                                _loadingLokasi = true;
+                                _lokasi = 'Memuat lokasi...';
+                              });
+                              _getLocation();
+                            },
+                            child: const Icon(
+                              Icons.location_on_rounded,
+                              color: AppTheme.primary,
+                              size: 28,
+                            ),
+                          ),
                     const SizedBox(width: 8),
                     Column(
                       mainAxisSize: MainAxisSize.min,
@@ -100,7 +204,7 @@ class BerandaScreen extends StatelessWidget {
                               ),
                         ),
                         Text(
-                          'Sudirman, Jakarta Pusat',
+                          _lokasi,
                           style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
                                 color: AppTheme.primary,
@@ -112,24 +216,59 @@ class BerandaScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+
+                Consumer<AuthService>(
+                  builder: (context, auth, _) {
+                    if (auth.isLoggedIn && auth.user != null) {
+                      return GestureDetector(
+                        onTap: () => _showProfileMenu(context, auth),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                            image: DecorationImage(
+                              image: NetworkImage(
+                                auth.user!.avatar ??
+                                    'https://i.pravatar.cc/150?img=3',
+                              ),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return GestureDetector(
+                      onTap: () => Navigator.of(context).pushNamed('/login'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'Masuk',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
                       ),
-                    ],
-                    image: const DecorationImage(
-                      image: NetworkImage('https://i.pravatar.cc/150?img=3'),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -139,31 +278,175 @@ class BerandaScreen extends StatelessWidget {
     );
   }
 
+  // ─── Profile popup menu ───────────────────────────────────────
+  void _showProfileMenu(BuildContext context, AuthService auth) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            CircleAvatar(
+              radius: 32,
+              backgroundImage: NetworkImage(
+                auth.user!.avatar ?? 'https://i.pravatar.cc/150?img=3',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              auth.user!.name,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              auth.user!.email,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppTheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await auth.signOut();
+                },
+                icon: const Icon(Icons.logout_rounded, color: Colors.red),
+                label: const Text(
+                  'Keluar',
+                  style: TextStyle(color: Colors.red),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  side: BorderSide(color: Colors.red.shade200),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Greeting ─────────────────────────────────────────────────
   Widget _buildGreeting(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Sore, Budi Utama 👋',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w900,
-              fontSize: 24,
-              color: AppTheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Udara sejuk bikin hari makin produktif.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.onSurfaceVariant,
-              fontSize: 14,
-            ),
-          ),
-        ],
+      child: Consumer<AuthService>(
+        builder: (context, auth, _) {
+          final String greeting = _getGreeting();
+
+          if (!auth.isLoggedIn) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$greeting 👋',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 24,
+                    color: AppTheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Masuk untuk pengalaman yang lebih personal.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pushNamed('/login'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.login_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Masuk Sekarang',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          final firstName = auth.user!.name.split(' ').first;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$greeting, $firstName 👋',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 24,
+                  color: AppTheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Udara sejuk bikin hari makin produktif.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.onSurfaceVariant,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 11) return 'Selamat pagi';
+    if (hour < 15) return 'Selamat siang';
+    if (hour < 18) return 'Selamat sore';
+    return 'Selamat malam';
   }
 
   // ─── DikariPay Card (hidden) ──────────────────────────────────
@@ -224,7 +507,7 @@ class BerandaScreen extends StatelessWidget {
             ],
           ),
           ElevatedButton(
-            onPressed: () {},
+            onPressed: () => _requireLogin(context, () {}),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.surfaceContainerLowest,
               foregroundColor: AppTheme.primary,
@@ -246,7 +529,6 @@ class BerandaScreen extends StatelessWidget {
 
   // ─── Weather Card ─────────────────────────────────────────────
   Widget _buildWeatherCard(BuildContext context) {
-    // Data dummy — nanti bisa diganti dengan API cuaca
     const double temperature = 34;
     const String condition = 'Cerah Berawan';
     const String humidity = '78%';
@@ -280,7 +562,6 @@ class BerandaScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Baris atas: suhu + ikon cuaca
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,17 +614,13 @@ class BerandaScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              // Ikon besar cuaca
               Text(
                 isHotWeather ? '☀️' : '⛅',
                 style: const TextStyle(fontSize: 64),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Detail cuaca kecil
           Row(
             children: [
               _buildWeatherDetail(
@@ -361,10 +638,7 @@ class BerandaScreen extends StatelessWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Rekomendasi banner
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -389,23 +663,26 @@ class BerandaScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Pesan',
-                    style: TextStyle(
-                      color: isHotWeather
-                          ? const Color(0xFFFF6B35)
-                          : AppTheme.primary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                GestureDetector(
+                  onTap: () => _requireLogin(context, () {}),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Pesan',
+                      style: TextStyle(
+                        color: isHotWeather
+                            ? const Color(0xFFFF6B35)
+                            : AppTheme.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -532,38 +809,41 @@ class BerandaScreen extends StatelessWidget {
 
   Widget _buildServiceItem(BuildContext context, Map<String, Object> service) {
     final Color iconColor = service['color'] as Color;
-    return SizedBox(
-      width: 72,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(14.0),
+    return GestureDetector(
+      onTap: () => _requireLogin(context, () {}),
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14.0),
+              ),
+              child: Icon(
+                service['icon'] as IconData,
+                color: iconColor,
+                size: 26,
+              ),
             ),
-            child: Icon(
-              service['icon'] as IconData,
-              color: iconColor,
-              size: 26,
+            const SizedBox(height: 6),
+            Text(
+              service['title'] as String,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppTheme.onSurfaceVariant,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                height: 1.3,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            service['title'] as String,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppTheme.onSurfaceVariant,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              height: 1.3,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

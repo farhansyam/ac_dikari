@@ -12,6 +12,15 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   google_fonts: ^6.2.1
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
+  google_sign_in: ^6.2.1
+  flutter_secure_storage: ^9.2.2
+  provider: ^6.1.2
+  http: ^1.2.1
+  url_launcher: ^6.3.1
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:
