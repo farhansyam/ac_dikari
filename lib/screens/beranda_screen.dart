@@ -810,7 +810,12 @@ class _BerandaScreenState extends State<BerandaScreen> {
   Widget _buildServiceItem(BuildContext context, Map<String, Object> service) {
     final Color iconColor = service['color'] as Color;
     return GestureDetector(
-      onTap: () => _requireLogin(context, () {}),
+      onTap: () => _requireLogin(context, () {
+        final title = service['title'] as String;
+        if (title == 'Cuci Reguler') {
+          Navigator.of(context).pushNamed('/order');
+        }
+      }),
       child: SizedBox(
         width: 72,
         child: Column(
