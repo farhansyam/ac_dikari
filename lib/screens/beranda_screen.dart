@@ -7,8 +7,8 @@ import '../core/theme.dart';
 import '../services/auth_service.dart';
 
 // ─── Feature Flags ───────────────────────────────────────────────
-const bool _showDikariPay = false;
-const bool _showWeatherCard = true;
+const bool _showDikariPay = true;
+const bool _showWeatherCard = false;
 // ─────────────────────────────────────────────────────────────────
 
 class BerandaScreen extends StatefulWidget {
@@ -496,30 +496,46 @@ class _BerandaScreenState extends State<BerandaScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              Text(
-                'Rp 450.000',
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 32,
-                ),
+              Consumer<AuthService>(
+                builder: (context, auth, _) {
+                  final balance = auth.user?.balance ?? 0;
+                  final formatted =
+                      'Rp ' +
+                      balance
+                          .toStringAsFixed(0)
+                          .replaceAllMapped(
+                            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                            (m) => '${m[1]}.',
+                          );
+                  return Text(
+                    formatted,
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 25,
+                    ),
+                  );
+                },
               ),
             ],
           ),
           ElevatedButton(
-            onPressed: () => _requireLogin(context, () {}),
+            onPressed: () => _requireLogin(
+              context,
+              () => Navigator.of(context).pushNamed('/dikaripay'),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.surfaceContainerLowest,
               foregroundColor: AppTheme.primary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(9999),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               elevation: 4,
             ),
             child: const Text(
               'Isi Saldo',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
         ],

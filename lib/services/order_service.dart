@@ -131,6 +131,8 @@ class OrderModel {
         return 'Selesai';
       case 'cancelled':
         return 'Dibatalkan';
+      case 'waiting_confirmation':
+        return 'Menunggu Konfirmasimu';
       default:
         return status;
     }
@@ -217,6 +219,17 @@ class OrderService {
     if (response.statusCode != 200) {
       final data = jsonDecode(response.body);
       throw Exception(data['message'] ?? 'Gagal membatalkan pesanan.');
+    }
+  }
+
+  Future<void> confirmOrder(int id) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/orders/$id/confirm'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw Exception(data['message'] ?? 'Gagal konfirmasi pesanan.');
     }
   }
 }

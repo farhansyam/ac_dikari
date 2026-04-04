@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
 import '../services/order_service.dart';
 import '../services/payment_service.dart';
-import 'payment_webview_screen.dart'; // ← tambah ini
+import '../services/dikaripay_service.dart';
+import 'payment_webview_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
   final OrderModel order;
@@ -18,6 +18,9 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   late PaymentService _paymentService;
+  late DikariPayService _dikariPayService;
+  double _dikariPayBalance = 0;
+  bool _useDikariPay = false;
   final _couponCtrl = TextEditingController();
 
   List<PaymentChannel> _channels = [];
@@ -44,7 +47,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
       baseUrl: AuthService.baseUrl,
       authService: auth,
     );
+    _dikariPayService = DikariPayService(
+      baseUrl: AuthService.baseUrl,
+      authService: auth,
+    );
     _loadChannels();
+    _loadDikariPayBalance();
   }
 
   @override
@@ -53,17 +61,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
     super.dispose();
   }
 
+  Future<void> _loadDikariPayBalance() async {
+    try {
+      final data = await _dikariPayService.getBalance();
+      if (!mounted) return;
+      setState(() {
+        _dikariPayBalance = data['balance'] as double;
+      });
+    } catch (_) {}
+  }
+
   Future<void> _loadChannels() async {
     try {
       final channels = await _paymentService.getChannels();
       if (!mounted) return;
-
-      // Groupkan per kategori
       final grouped = <String, List<PaymentChannel>>{};
       for (final ch in channels) {
         grouped.putIfAbsent(ch.group, () => []).add(ch);
       }
-
       setState(() {
         _channels = channels;
         _groupedChannels = grouped;
@@ -94,9 +109,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _couponError = result.valid ? null : result.message;
         _validatingCoupon = false;
       });
-      if (result.valid) {
-        _showSnackBar(result.message);
-      }
+      if (result.valid) _showSnackBar(result.message);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -115,14 +128,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _pay() async {
-    if (_selectedChannel == null) {
-      _showSnackBar('Pilih metode pembayaran terlebih dahulu.');
-      return;
-    }
-
     setState(() => _paying = true);
 
     try {
+      if (_useDikariPay) {
+        await _dikariPayService.payWithBalance(
+          orderId: widget.order.id,
+          couponCode: _couponResult != null ? _couponCtrl.text.trim() : null,
+        );
+        if (!mounted) return;
+        setState(() => _paying = false);
+        Navigator.of(context).pop(); // balik ke order detail
+        return;
+      }
+
+      if (_selectedChannel == null) {
+        setState(() => _paying = false);
+        _showSnackBar('Pilih metode pembayaran terlebih dahulu.');
+        return;
+      }
+
       final result = await _paymentService.createTransaction(
         orderId: widget.order.id,
         paymentMethod: _selectedChannel!.code,
@@ -130,10 +155,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
       );
 
       if (!mounted) return;
+      setState(() => _paying = false);
 
       final paymentUrl = result['payment_url'] as String?;
       if (paymentUrl != null) {
-        Navigator.pushReplacement(
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => PaymentWebViewScreen(
@@ -142,10 +168,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
           ),
         );
+        if (!mounted) return;
+        Navigator.of(context).pop(); // balik ke order detail
       }
-
-      // Kembali ke home setelah buka browser
-      if (!mounted) return;
     } catch (e) {
       if (!mounted) return;
       setState(() => _paying = false);
@@ -185,22 +210,123 @@ class _PaymentScreenState extends State<PaymentScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               children: [
-                // ─── Ringkasan Order ───────────────────────────
                 _buildOrderSummary(),
                 const SizedBox(height: 20),
-
-                // ─── Kupon ─────────────────────────────────────
                 _buildCouponSection(),
                 const SizedBox(height: 20),
-
-                // ─── Metode Pembayaran ─────────────────────────
-                _buildSectionTitle('Metode Pembayaran'),
+                _buildDikariPayOption(),
+                const SizedBox(height: 20),
+                _buildSectionTitle('Atau Bayar dengan'),
                 ..._groupedChannels.entries.map(
                   (entry) => _buildChannelGroup(entry.key, entry.value),
                 ),
               ],
             ),
       bottomNavigationBar: _buildBottomBar(),
+    );
+  }
+
+  Widget _buildDikariPayOption() {
+    final bool cukup = _dikariPayBalance >= _grandTotal;
+
+    return GestureDetector(
+      onTap: cukup
+          ? () => setState(() => _useDikariPay = !_useDikariPay)
+          : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _useDikariPay ? AppTheme.primary : Colors.grey.shade200,
+            width: _useDikariPay ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.account_balance_wallet_rounded,
+                color: AppTheme.primary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'DikariPay',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Saldo: ${_formatCurrency(_dikariPayBalance)}',
+                    style: TextStyle(
+                      color: cukup
+                          ? Colors.green.shade600
+                          : Colors.red.shade600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (!cukup)
+                    Text(
+                      'Saldo tidak mencukupi',
+                      style: TextStyle(
+                        color: Colors.red.shade400,
+                        fontSize: 11,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (!cukup)
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/dikaripay'),
+                child: const Text('Topup'),
+              )
+            else
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: _useDikariPay ? AppTheme.primary : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _useDikariPay
+                        ? AppTheme.primary
+                        : Colors.grey.shade400,
+                    width: 2,
+                  ),
+                ),
+                child: _useDikariPay
+                    ? const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 14,
+                      )
+                    : null,
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -228,8 +354,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-
-          // Items
           ...widget.order.items.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -256,8 +380,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
             ),
           ),
-
-          // Biaya apartemen
           if (widget.order.apartmentSurcharge > 0) ...[
             const Divider(height: 16),
             Row(
@@ -277,10 +399,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ],
             ),
           ],
-
           const Divider(height: 16),
-
-          // Subtotal
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -300,8 +419,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
             ],
           ),
-
-          // Diskon kupon
           if (_discount > 0) ...[
             const SizedBox(height: 6),
             Row(
@@ -335,8 +452,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ],
             ),
           ],
-
-          // Fee pembayaran
           if (_fee > 0) ...[
             const SizedBox(height: 6),
             Row(
@@ -356,10 +471,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ],
             ),
           ],
-
           const Divider(height: 16),
-
-          // Total
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -417,8 +529,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // Kupon sudah diterapkan
           if (_couponResult != null) ...[
             Container(
               padding: const EdgeInsets.all(12),
@@ -469,7 +579,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
             ),
           ] else ...[
-            // Input kupon
             Row(
               children: [
                 Expanded(
@@ -577,13 +686,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
               return Column(
                 children: [
                   InkWell(
-                    onTap: () => setState(() => _selectedChannel = ch),
+                    onTap: () => setState(() {
+                      _selectedChannel = ch;
+                      _useDikariPay = false;
+                    }),
                     borderRadius: BorderRadius.circular(14),
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Row(
                         children: [
-                          // Logo
                           Container(
                             width: 48,
                             height: 32,
@@ -607,8 +718,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                 : const Icon(Icons.payment_rounded, size: 20),
                           ),
                           const SizedBox(width: 12),
-
-                          // Nama & fee
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -633,8 +742,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               ],
                             ),
                           ),
-
-                          // Radio
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             width: 22,

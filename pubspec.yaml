@@ -26,6 +26,9 @@ dependencies:
   latlong2: ^0.9.1
   intl: ^0.20.2
   webview_flutter: ^4.10.0
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  flutter_local_notifications: ^17.0.0
 
 dev_dependencies:
   flutter_test:

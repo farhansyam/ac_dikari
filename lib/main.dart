@@ -1,8 +1,13 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
+import 'services/order_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -11,14 +16,24 @@ import 'screens/address_screen.dart';
 import 'screens/phone_screen.dart';
 import 'screens/order_flow_screen.dart';
 import 'screens/payment_screen.dart';
-import 'services/order_service.dart'; // ← tambah ini
-import 'package:flutter_localizations/flutter_localizations.dart'; // ← tambah
 import 'screens/pesanan_screen.dart';
+import 'screens/dikaripay_screen.dart';
 
-// Di routes:
-void main() {
+// ─── Background handler ───────────────────────────────────────────
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  GoogleFonts.config.allowRuntimeFetching = false;
+
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await NotificationService().init();
+
+  GoogleFonts.config.allowRuntimeFetching = true;
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => AuthService()..init(),
@@ -36,7 +51,9 @@ class MyApp extends StatelessWidget {
       title: 'AC Dikari',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      // ← tambah ini
+
+      navigatorKey: NotificationService.navigatorKey,
+
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -55,11 +72,15 @@ class MyApp extends StatelessWidget {
         '/kontak': (_) => const PhoneScreen(),
         '/order': (_) => const OrderFlowScreen(),
         '/pesanan': (_) => const PesananScreen(),
+        '/dikaripay': (_) => const DikariPayScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/payment') {
           final order = settings.arguments as OrderModel;
-          return MaterialPageRoute(builder: (_) => PaymentScreen(order: order));
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => PaymentScreen(order: order),
+          );
         }
         return null;
       },

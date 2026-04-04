@@ -104,6 +104,17 @@ class ProfileScreen extends StatelessWidget {
                 _buildSectionLabel(context, 'Akun'),
                 _buildMenuCard(context, [
                   _MenuItem(
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: AppTheme.primary,
+                    title: 'DikariPay',
+                    subtitle: 'Kelola saldo & topup',
+                    onTap: () => _requireLogin(
+                      context,
+                      auth,
+                      () => Navigator.of(context).pushNamed('/dikaripay'),
+                    ),
+                  ),
+                  _MenuItem(
                     icon: Icons.receipt_long_rounded,
                     color: AppTheme.primary,
                     title: 'Pesanan Saya',

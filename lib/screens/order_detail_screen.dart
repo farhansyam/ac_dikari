@@ -92,6 +92,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     );
   }
 
+  Future<void> _confirmOrder() async {
+    try {
+      await _orderService.confirmOrder(widget.orderId);
+      await _loadOrder();
+      if (!mounted) return;
+      _showSnackBar('Pesanan dikonfirmasi selesai! Terima kasih.');
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.toString());
+    }
+  }
+
   String _formatCurrency(double amount) {
     final formatted = amount
         .toStringAsFixed(0)
@@ -500,6 +512,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
 
     // Bisa dibatalkan
+    if (order.status == 'waiting_confirmation') {
+      return _bottomButton(
+        label: 'Konfirmasi Selesai',
+        color: Colors.green,
+        onTap: _confirmOrder,
+      );
+    }
     if (order.status == 'pending' &&
         order.paymentStatus == 'unpaid' &&
         order.tripayReference == null) {

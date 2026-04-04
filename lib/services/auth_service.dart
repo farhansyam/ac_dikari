@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'notification_service.dart'; // ← tambah import
 
 class UserModel {
   final int id;
@@ -10,6 +12,7 @@ class UserModel {
   final String email;
   final String? avatar;
   final String? role;
+  final double balance; // ← tambah
 
   UserModel({
     required this.id,
@@ -17,6 +20,7 @@ class UserModel {
     required this.email,
     this.avatar,
     this.role,
+    this.balance = 0,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -26,6 +30,7 @@ class UserModel {
       email: json['email'],
       avatar: json['avatar'],
       role: json['role'],
+      balance: (json['balance'] as num? ?? 0).toDouble(), // ← tambah
     );
   }
 }
@@ -34,9 +39,11 @@ class AuthService extends ChangeNotifier {
   // ─── Ganti dengan base URL backend Laravel kamu ───────────────
   // static const String _baseUrl = 'http://10.0.2.2:8000/api';
   // static const String _baseUrl = 'http://10.18.40.17:8000/api';
-  static const String _baseUrl = 'http://192.168.100.23:8000/api';
+  static const String _baseUrl =
+      'https://noegenetic-jiggly-lulu.ngrok-free.dev/api';
   static String get baseUrl => _baseUrl; // ← tambah ini
-  static const String _wilayahBase = 'http://192.168.100.23:8000';
+  static const String _wilayahBase =
+      'https://noegenetic-jiggly-lulu.ngrok-free.dev';
 
   // ─────────────────────────────────────────────────────────────
 
@@ -60,6 +67,7 @@ class AuthService extends ChangeNotifier {
     _token = await _storage.read(key: 'auth_token');
     if (_token != null) {
       await _fetchMe();
+      await _saveFcmToken(); // ←
     }
     notifyListeners();
   }
@@ -71,11 +79,9 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Mulai flow Google Sign In
       final GoogleSignInAccount? googleAccount = await _googleSignIn.signIn();
 
       if (googleAccount == null) {
-        // User membatalkan login
         _isLoading = false;
         notifyListeners();
         return false;
@@ -90,7 +96,6 @@ class AuthService extends ChangeNotifier {
         throw Exception('Tidak dapat mengambil access token dari Google.');
       }
 
-      // Kirim ke backend Laravel
       final response = await http.post(
         Uri.parse('$_baseUrl/auth/google'),
         headers: {
@@ -106,10 +111,8 @@ class AuthService extends ChangeNotifier {
       if (response.statusCode == 200) {
         _token = data['token'];
         _user = UserModel.fromJson(data['user']);
-
-        // Simpan token secara aman
         await _storage.write(key: 'auth_token', value: _token);
-
+        await _saveFcmToken(); // ← tambah di sini
         _isLoading = false;
         notifyListeners();
         return true;
@@ -124,6 +127,33 @@ class AuthService extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<void> _saveFcmToken() async {
+    try {
+      final fcmToken = await NotificationService().getToken();
+      debugPrint('=== FCM TOKEN: $fcmToken');
+      debugPrint('=== AUTH TOKEN: $_token');
+
+      if (fcmToken == null || _token == null) {
+        debugPrint('=== FCM SKIP: token null');
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/fcm-token'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'fcm_token': fcmToken}),
+      );
+
+      debugPrint('=== FCM RESPONSE: ${response.statusCode} ${response.body}');
+    } catch (e) {
+      debugPrint('=== FCM ERROR: $e');
     }
   }
 
