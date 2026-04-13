@@ -64,7 +64,7 @@ class OrderModel {
   final String scheduledDate;
   final String scheduledTime;
   final double apartmentSurcharge;
-  final double discountAmount; // ← tambah
+  final double discountAmount;
   final String? tripayReference;
   final double subtotal;
   final double totalAmount;
@@ -74,8 +74,12 @@ class OrderModel {
   final Map<String, dynamic> address;
   final List<Map<String, dynamic>> items;
   final String createdAt;
-  final String paymentStatus; // ← tambah
-  final String? tripayPaymentUrl; // ← tambah
+  final String paymentStatus;
+  final String? tripayPaymentUrl;
+  final Map<String, dynamic>? report;
+  final String? technicianName;
+  final Map<String, dynamic>? rating;
+  final Map<String, dynamic>? complaint;
 
   OrderModel({
     required this.id,
@@ -95,6 +99,10 @@ class OrderModel {
     required this.createdAt,
     required this.paymentStatus,
     this.tripayPaymentUrl,
+    this.report,
+    this.technicianName,
+    this.rating,
+    this.complaint,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -116,6 +124,16 @@ class OrderModel {
       createdAt: json['created_at'] ?? '',
       paymentStatus: json['payment_status'] ?? 'unpaid',
       tripayPaymentUrl: json['tripay_payment_url'],
+      report: json['report'] != null
+          ? Map<String, dynamic>.from(json['report'])
+          : null,
+      technicianName: json['technician_name'],
+      rating: json['rating'] != null
+          ? Map<String, dynamic>.from(json['rating'])
+          : null,
+      complaint: json['complaint'] != null
+          ? Map<String, dynamic>.from(json['complaint'])
+          : null,
     );
   }
 
@@ -127,12 +145,16 @@ class OrderModel {
         return 'Dikonfirmasi';
       case 'in_progress':
         return 'Sedang Dikerjakan';
+      case 'waiting_confirmation':
+        return 'Menunggu Konfirmasimu';
+      case 'warranty':
+        return 'Masa Garansi';
+      case 'complained':
+        return 'Dikomplain';
       case 'completed':
         return 'Selesai';
       case 'cancelled':
         return 'Dibatalkan';
-      case 'waiting_confirmation':
-        return 'Menunggu Konfirmasimu';
       default:
         return status;
     }
@@ -157,10 +179,8 @@ class OrderService {
     final uri = Uri.parse(
       '$baseUrl/services',
     ).replace(queryParameters: city != null ? {'city': city} : null);
-
     final response = await http.get(uri, headers: _headers);
     final data = jsonDecode(response.body);
-
     if (response.statusCode == 200) {
       return {
         'services': (data['services'] as List)

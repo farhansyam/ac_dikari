@@ -12,38 +12,21 @@ class PesananScreen extends StatefulWidget {
   State<PesananScreen> createState() => _PesananScreenState();
 }
 
-class _PesananScreenState extends State<PesananScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _PesananScreenState extends State<PesananScreen> {
   late OrderService _orderService;
   List<OrderModel> _orders = [];
   bool _loading = true;
   String? _error;
 
-  final List<String> _tabs = [
-    'Semua',
-    'Menunggu',
-    'Aktif',
-    'Selesai',
-    'Dibatalkan',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
     final auth = context.read<AuthService>();
     _orderService = OrderService(
       baseUrl: AuthService.baseUrl,
       authService: auth,
     );
     _loadOrders();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadOrders() async {
@@ -55,7 +38,18 @@ class _PesananScreenState extends State<PesananScreen>
       final orders = await _orderService.getOrders();
       if (!mounted) return;
       setState(() {
-        _orders = orders;
+        _orders = orders
+            .where(
+              (o) => [
+                'pending',
+                'confirmed',
+                'in_progress',
+                'waiting_confirmation',
+                'warranty',
+                'complained',
+              ].contains(o.status),
+            )
+            .toList();
         _loading = false;
       });
     } catch (e) {
@@ -67,25 +61,8 @@ class _PesananScreenState extends State<PesananScreen>
     }
   }
 
-  List<OrderModel> _filteredOrders(String tab) {
-    if (tab == 'Semua') return _orders;
-    if (tab == 'Menunggu') {
-      return _orders
-          .where((o) => o.status == 'pending' && o.paymentStatus == 'unpaid')
-          .toList();
-    }
-    if (tab == 'Aktif') {
-      return _orders
-          .where((o) => o.status == 'confirmed' || o.status == 'in_progress')
-          .toList();
-    }
-    if (tab == 'Selesai') {
-      return _orders.where((o) => o.status == 'completed').toList();
-    }
-    if (tab == 'Dibatalkan') {
-      return _orders.where((o) => o.status == 'cancelled').toList();
-    }
-    return _orders;
+  String _formatCurrency(double amount) {
+    return 'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
   }
 
   @override
@@ -93,34 +70,26 @@ class _PesananScreenState extends State<PesananScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
       appBar: AppBar(
-        title: const Text('Pesanan Saya'),
+        title: const Text('Pesanan Aktif'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.onSurface,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          labelColor: AppTheme.primary,
-          unselectedLabelColor: AppTheme.onSurfaceVariant,
-          indicatorColor: AppTheme.primary,
-          indicatorWeight: 3,
-          labelStyle: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-          ),
-          unselectedLabelStyle: const TextStyle(fontSize: 13),
-          tabs: _tabs.map((t) => Tab(text: t)).toList(),
-        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? _buildError()
-          : TabBarView(
-              controller: _tabController,
-              children: _tabs.map((tab) => _buildOrderList(tab)).toList(),
+          : _orders.isEmpty
+          ? _buildEmpty()
+          : RefreshIndicator(
+              onRefresh: _loadOrders,
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: _orders.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (_, i) => _buildOrderCard(_orders[i]),
+              ),
             ),
     );
   }
@@ -134,11 +103,9 @@ class _PesananScreenState extends State<PesananScreen>
           children: [
             Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Gagal memuat pesanan',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
@@ -151,25 +118,7 @@ class _PesananScreenState extends State<PesananScreen>
     );
   }
 
-  Widget _buildOrderList(String tab) {
-    final orders = _filteredOrders(tab);
-
-    if (orders.isEmpty) {
-      return _buildEmpty(tab);
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadOrders,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: orders.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, index) => _buildOrderCard(orders[index]),
-      ),
-    );
-  }
-
-  Widget _buildEmpty(String tab) {
+  Widget _buildEmpty() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -188,18 +137,28 @@ class _PesananScreenState extends State<PesananScreen>
             ),
           ),
           const SizedBox(height: 16),
-          Text(
-            tab == 'Semua' ? 'Belum Ada Pesanan' : 'Tidak Ada Pesanan $tab',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          const Text(
+            'Tidak Ada Pesanan Aktif',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
           Text(
-            'Yuk pesan layanan AC pertama kamu!',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppTheme.onSurfaceVariant),
+            'Semua pesanan kamu sudah selesai.',
+            style: TextStyle(color: AppTheme.onSurfaceVariant, fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pushNamed('/order'),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Buat Pesanan Baru'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
           ),
         ],
       ),
@@ -226,7 +185,6 @@ class _PesananScreenState extends State<PesananScreen>
         ),
         child: Column(
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               decoration: BoxDecoration(
@@ -256,14 +214,11 @@ class _PesananScreenState extends State<PesananScreen>
                 ],
               ),
             ),
-
-            // Content
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Layanan
                   ...order.items
                       .take(2)
                       .map(
@@ -293,11 +248,11 @@ class _PesananScreenState extends State<PesananScreen>
                         fontSize: 12,
                       ),
                     ),
+
                   const SizedBox(height: 10),
                   Divider(height: 1, color: Colors.grey.shade100),
                   const SizedBox(height: 10),
 
-                  // Jadwal & Total
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -329,48 +284,45 @@ class _PesananScreenState extends State<PesananScreen>
                     ],
                   ),
 
-                  // Payment status
+                  // Banner belum bayar
                   if (order.paymentStatus == 'unpaid' &&
                       order.status != 'cancelled') ...[
                     const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.payment_rounded,
-                            size: 14,
-                            color: Colors.orange.shade700,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Belum dibayar',
-                            style: TextStyle(
-                              color: Colors.orange.shade700,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            'Bayar Sekarang →',
-                            style: TextStyle(
-                              color: Colors.orange.shade700,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                    _buildBanner(
+                      icon: Icons.payment_rounded,
+                      text: 'Belum dibayar',
+                      trailing: 'Bayar Sekarang →',
+                      color: Colors.orange,
+                    ),
+                  ],
+
+                  // Banner menunggu konfirmasi
+                  if (order.status == 'waiting_confirmation') ...[
+                    const SizedBox(height: 10),
+                    _buildBanner(
+                      icon: Icons.check_circle_rounded,
+                      text: 'Pekerjaan selesai · Tap untuk konfirmasi',
+                      color: Colors.green,
+                    ),
+                  ],
+
+                  // Banner masa garansi
+                  if (order.status == 'warranty') ...[
+                    const SizedBox(height: 10),
+                    _buildBanner(
+                      icon: Icons.shield_rounded,
+                      text: 'Masa garansi aktif',
+                      color: Colors.teal,
+                    ),
+                  ],
+
+                  // Banner dikomplain
+                  if (order.status == 'complained') ...[
+                    const SizedBox(height: 10),
+                    _buildBanner(
+                      icon: Icons.warning_rounded,
+                      text: 'Komplain sedang diproses',
+                      color: Colors.orange,
                     ),
                   ],
                 ],
@@ -378,6 +330,48 @@ class _PesananScreenState extends State<PesananScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBanner({
+    required IconData icon,
+    required String text,
+    String? trailing,
+    required MaterialColor color,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color.shade700),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: color.shade700,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (trailing != null) ...[
+            const Spacer(),
+            Text(
+              trailing,
+              style: TextStyle(
+                color: color.shade700,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -403,15 +397,20 @@ class _PesananScreenState extends State<PesananScreen>
         bgColor = Colors.purple.shade50;
         label = 'Dikerjakan';
         break;
-      case 'completed':
+      case 'waiting_confirmation':
         color = Colors.green.shade700;
         bgColor = Colors.green.shade50;
-        label = 'Selesai';
+        label = 'Perlu Konfirmasi';
         break;
-      case 'cancelled':
-        color = Colors.red.shade700;
-        bgColor = Colors.red.shade50;
-        label = 'Dibatalkan';
+      case 'warranty':
+        color = Colors.teal.shade700;
+        bgColor = Colors.teal.shade50;
+        label = 'Masa Garansi';
+        break;
+      case 'complained':
+        color = Colors.orange.shade700;
+        bgColor = Colors.orange.shade50;
+        label = 'Dikomplain';
         break;
       default:
         color = Colors.grey.shade700;
@@ -434,15 +433,5 @@ class _PesananScreenState extends State<PesananScreen>
         ),
       ),
     );
-  }
-
-  String _formatCurrency(double amount) {
-    final formatted = amount
-        .toStringAsFixed(0)
-        .replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]}.',
-        );
-    return 'Rp $formatted';
   }
 }

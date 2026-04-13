@@ -97,7 +97,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       await _orderService.confirmOrder(widget.orderId);
       await _loadOrder();
       if (!mounted) return;
-      _showSnackBar('Pesanan dikonfirmasi selesai! Terima kasih.');
+      _showSnackBar('Pesanan dikonfirmasi! Masa garansi 7 hari aktif.');
+
+      if (_order?.rating == null) {
+        Navigator.of(context)
+            .pushNamed(
+              '/rating',
+              arguments: {
+                'orderId': widget.orderId,
+                'technicianName': _order?.technicianName ?? 'Teknisi',
+              },
+            )
+            .then((_) => _loadOrder());
+      }
     } catch (e) {
       if (!mounted) return;
       _showSnackBar(e.toString());
@@ -105,13 +117,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   String _formatCurrency(double amount) {
-    final formatted = amount
-        .toStringAsFixed(0)
-        .replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]}.',
-        );
-    return 'Rp $formatted';
+    return 'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
   }
 
   @override
@@ -139,7 +145,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Status card
         _buildStatusCard(order),
         const SizedBox(height: 16),
 
@@ -322,8 +327,324 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             ],
           ),
         ),
+
+        // Laporan Pengerjaan
+        if (order.report != null) ...[
+          const SizedBox(height: 16),
+          _buildSection(
+            title: 'Laporan Pengerjaan',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              order.report!['photo_before'] ?? '',
+                              height: 120,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                height: 120,
+                                color: Colors.grey.shade200,
+                                child: const Icon(
+                                  Icons.broken_image_rounded,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Sebelum',
+                            style: TextStyle(
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              order.report!['photo_after'] ?? '',
+                              height: 120,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                height: 120,
+                                color: Colors.grey.shade200,
+                                child: const Icon(
+                                  Icons.broken_image_rounded,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Sesudah',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Checklist Pengerjaan',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                _buildChecklistItem(
+                  'Filter dibersihkan',
+                  order.report!['filter_cleaned'] == true,
+                ),
+                _buildChecklistItem(
+                  'Freon dicek',
+                  order.report!['freon_checked'] == true,
+                ),
+                _buildChecklistItem(
+                  'Saluran pembuangan dibersihkan',
+                  order.report!['drain_cleaned'] == true,
+                ),
+                _buildChecklistItem(
+                  'Kelistrikan dicek',
+                  order.report!['electrical_checked'] == true,
+                ),
+                if ((order.report!['notes'] ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Catatan Teknisi',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    order.report!['notes'],
+                    style: const TextStyle(fontSize: 13, height: 1.4),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        // ─── Garansi aktif + tombol komplain ─────────────────
+        if (order.status == 'warranty') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.teal.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.shield_rounded,
+                  color: Colors.teal.shade700,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Masa garansi aktif. Ajukan komplain jika ada masalah dengan hasil pengerjaan.',
+                    style: TextStyle(color: Colors.teal.shade700, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context)
+                  .pushNamed('/complaint', arguments: order.id)
+                  .then((result) {
+                    if (result == true) _loadOrder();
+                  }),
+              icon: const Icon(Icons.warning_rounded, color: Colors.red),
+              label: const Text('Ajukan Komplain'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+
+        // ─── Status dikomplain ────────────────────────────────
+        if (order.status == 'complained') ...[
+          const SizedBox(height: 16),
+          _buildSection(
+            title: 'Status Komplain',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.warning_rounded,
+                      color: Colors.orange.shade700,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      order.complaint?['status_label'] ?? 'Sedang Diproses',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                if ((order.complaint?['bp_comment'] ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Komentar Tim Kami',
+                          style: TextStyle(
+                            color: Colors.orange.shade700,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          order.complaint!['bp_comment'],
+                          style: const TextStyle(fontSize: 13, height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  'Diajukan ${order.complaint?['created_at'] ?? '-'}',
+                  style: TextStyle(
+                    color: AppTheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // ─── Rating sudah diberikan ───────────────────────────
+        if (order.status == 'completed' && order.rating != null) ...[
+          const SizedBox(height: 16),
+          _buildSection(
+            title: 'Ulasan Kamu',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: List.generate(
+                    5,
+                    (i) => Icon(
+                      i < (order.rating!['rating'] as int)
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      color: Colors.amber,
+                      size: 24,
+                    ),
+                  ),
+                ),
+                if ((order.rating!['review'] ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    order.rating!['review'],
+                    style: const TextStyle(fontSize: 13, height: 1.4),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        // ─── Tombol beri rating kalau belum ──────────────────
+        if (order.status == 'completed' && order.rating == null) ...[
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context)
+                  .pushNamed(
+                    '/rating',
+                    arguments: {
+                      'orderId': order.id,
+                      'technicianName': order.technicianName ?? 'Teknisi',
+                    },
+                  )
+                  .then((_) => _loadOrder()),
+              icon: const Icon(Icons.star_rounded, color: Colors.amber),
+              label: const Text('Beri Ulasan'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                side: const BorderSide(color: AppTheme.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+
         const SizedBox(height: 80),
       ],
+    );
+  }
+
+  Widget _buildChecklistItem(String label, bool checked) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            checked ? Icons.check_circle_rounded : Icons.cancel_rounded,
+            size: 18,
+            color: checked ? Colors.green : Colors.grey.shade400,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: checked ? AppTheme.onSurface : Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -343,6 +664,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       case 'in_progress':
         statusColor = Colors.purple;
         statusIcon = Icons.build_rounded;
+        break;
+      case 'waiting_confirmation':
+        statusColor = Colors.teal;
+        statusIcon = Icons.pending_actions_rounded;
+        break;
+      case 'warranty':
+        statusColor = Colors.teal.shade700;
+        statusIcon = Icons.shield_rounded;
+        break;
+      case 'complained':
+        statusColor = Colors.orange;
+        statusIcon = Icons.warning_rounded;
         break;
       case 'completed':
         statusColor = Colors.green;
@@ -401,7 +734,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               ],
             ),
           ),
-          // Payment status badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
@@ -492,7 +824,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     if (_order == null) return null;
     final order = _order!;
 
-    // Belum bayar → tombol bayar
     if (order.paymentStatus == 'unpaid' &&
         order.status != 'cancelled' &&
         order.tripayPaymentUrl != null) {
@@ -511,7 +842,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       );
     }
 
-    // Bisa dibatalkan
     if (order.status == 'waiting_confirmation') {
       return _bottomButton(
         label: 'Konfirmasi Selesai',
@@ -519,6 +849,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         onTap: _confirmOrder,
       );
     }
+
     if (order.status == 'pending' &&
         order.paymentStatus == 'unpaid' &&
         order.tripayReference == null) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import 'beranda_screen.dart';
 import 'profile_screen.dart';
+import 'pesanan_screen.dart';
 import 'riwayat_screen.dart'; // ← tambah import
 
 class HomeScreen extends StatefulWidget {
@@ -16,7 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _screens = [
     const BerandaScreen(),
-    const _PlaceholderScreen(label: 'Pesanan'),
+    const PesananScreen(),
     const RiwayatScreen(),
     const ProfileScreen(), // ← ganti dari placeholder
   ];

@@ -18,6 +18,8 @@ import 'screens/order_flow_screen.dart';
 import 'screens/payment_screen.dart';
 import 'screens/pesanan_screen.dart';
 import 'screens/dikaripay_screen.dart';
+import 'screens/rating_screen.dart';
+import 'screens/complaint_screen.dart';
 
 // ─── Background handler ───────────────────────────────────────────
 @pragma('vm:entry-point')
@@ -80,6 +82,22 @@ class MyApp extends StatelessWidget {
           return MaterialPageRoute(
             settings: settings,
             builder: (_) => PaymentScreen(order: order),
+          );
+        }
+        // Di onGenerateRoute:
+        if (settings.name == '/rating') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (_) => RatingScreen(
+              orderId: args['orderId'],
+              technicianName: args['technicianName'],
+            ),
+          );
+        }
+        if (settings.name == '/complaint') {
+          final orderId = settings.arguments as int;
+          return MaterialPageRoute(
+            builder: (_) => ComplaintScreen(orderId: orderId),
           );
         }
         return null;

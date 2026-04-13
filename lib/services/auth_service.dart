@@ -13,6 +13,7 @@ class UserModel {
   final String? avatar;
   final String? role;
   final double balance; // ← tambah
+  final double avgRating;
 
   UserModel({
     required this.id,
@@ -21,6 +22,7 @@ class UserModel {
     this.avatar,
     this.role,
     this.balance = 0,
+    required this.avgRating,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -30,7 +32,8 @@ class UserModel {
       email: json['email'],
       avatar: json['avatar'],
       role: json['role'],
-      balance: (json['balance'] as num? ?? 0).toDouble(), // ← tambah
+      balance: (json['balance'] as num? ?? 0).toDouble(),
+      avgRating: (json['avg_rating'] as num? ?? 0).toDouble(), // ← tambah
     );
   }
 }
