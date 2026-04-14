@@ -75,6 +75,23 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshUser() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/auth/me'),
+        headers: {
+          'Authorization': 'Bearer $_token',
+          'Accept': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _user = UserModel.fromJson(data['user']);
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
   // ─── Google Sign In ───────────────────────────────────────────
   Future<bool> signInWithGoogle() async {
     _isLoading = true;

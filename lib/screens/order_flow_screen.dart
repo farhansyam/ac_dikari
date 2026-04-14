@@ -641,7 +641,7 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Image.network(
-                  'http://192.168.100.23:8000/storage/${service.banner}',
+                  'https://noegenetic-jiggly-lulu.ngrok-free.dev/storage/${service.banner}',
                   width: double.infinity,
                   height: 120,
                   fit: BoxFit.cover,

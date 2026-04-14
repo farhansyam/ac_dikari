@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
@@ -11,6 +13,38 @@ const bool _showDikariPay = true;
 const bool _showWeatherCard = false;
 // ─────────────────────────────────────────────────────────────────
 
+class ReviewModel {
+  final int id;
+  final int rating;
+  final String review;
+  final String customerName;
+  final String? customerAvatar;
+  final String technicianName;
+  final String createdAt;
+
+  ReviewModel({
+    required this.id,
+    required this.rating,
+    required this.review,
+    required this.customerName,
+    this.customerAvatar,
+    required this.technicianName,
+    required this.createdAt,
+  });
+
+  factory ReviewModel.fromJson(Map<String, dynamic> json) {
+    return ReviewModel(
+      id: json['id'],
+      rating: json['rating'],
+      review: json['review'] ?? '',
+      customerName: json['customer_name'] ?? 'Customer',
+      customerAvatar: json['customer_avatar'],
+      technicianName: json['technician_name'] ?? 'Teknisi',
+      createdAt: json['created_at'] ?? '',
+    );
+  }
+}
+
 class BerandaScreen extends StatefulWidget {
   const BerandaScreen({Key? key}) : super(key: key);
 
@@ -18,14 +52,51 @@ class BerandaScreen extends StatefulWidget {
   State<BerandaScreen> createState() => _BerandaScreenState();
 }
 
-class _BerandaScreenState extends State<BerandaScreen> {
+class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
   String _lokasi = 'Memuat lokasi...';
   bool _loadingLokasi = true;
+  List<ReviewModel> _reviews = [];
+  bool _loadingReviews = true;
 
   @override
   void initState() {
     super.initState();
     _getLocation();
+    _loadReviews();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<AuthService>().refreshUser();
+    });
+  }
+
+  Future<void> _refreshData() async {
+    await Future.wait([
+      context.read<AuthService>().refreshUser(),
+      _loadReviews(),
+    ]);
+  }
+
+  Future<void> _loadReviews() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AuthService.baseUrl}/reviews'),
+        headers: {'Accept': 'application/json'},
+      );
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _reviews = (data['reviews'] as List)
+              .map((e) => ReviewModel.fromJson(e))
+              .toList();
+          _loadingReviews = false;
+        });
+      } else {
+        setState(() => _loadingReviews = false);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingReviews = false);
+    }
   }
 
   Future<void> _getLocation() async {
@@ -81,7 +152,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
           subLocality,
           locality,
         ].where((s) => s.isNotEmpty).join(', ');
-
         setState(() {
           _lokasi = hasil.isNotEmpty ? hasil : 'Lokasi ditemukan';
           _loadingLokasi = false;
@@ -111,35 +181,39 @@ class _BerandaScreenState extends State<BerandaScreen> {
       backgroundColor: const Color(0xFFF7F9FC),
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(context),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.only(
-          top: 100,
-          bottom: 32,
-          left: 16,
-          right: 16,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildGreeting(context),
-            const SizedBox(height: 16),
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(
+            top: 100,
+            bottom: 32,
+            left: 16,
+            right: 16,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildGreeting(context),
+              const SizedBox(height: 16),
 
-            if (_showDikariPay) ...[
-              _buildWalletCard(context),
+              if (_showDikariPay) ...[
+                _buildWalletCard(context),
+                const SizedBox(height: 24),
+              ],
+
+              if (_showWeatherCard) ...[
+                _buildWeatherCard(context),
+                const SizedBox(height: 24),
+              ],
+
+              _buildServiceGrid(context),
               const SizedBox(height: 24),
-            ],
-
-            if (_showWeatherCard) ...[
-              _buildWeatherCard(context),
+              _buildPromoCarousel(context),
               const SizedBox(height: 24),
+              _buildTestimonials(context),
             ],
-
-            _buildServiceGrid(context),
-            const SizedBox(height: 24),
-            _buildPromoCarousel(context),
-            const SizedBox(height: 24),
-            _buildTestimonials(context),
-          ],
+          ),
         ),
       ),
     );
@@ -216,7 +290,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
                     ),
                   ],
                 ),
-
                 Consumer<AuthService>(
                   builder: (context, auth, _) {
                     if (auth.isLoggedIn && auth.user != null) {
@@ -246,7 +319,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
                         ),
                       );
                     }
-
                     return GestureDetector(
                       onTap: () => Navigator.of(context).pushNamed('/login'),
                       child: Container(
@@ -278,7 +350,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
-  // ─── Profile popup menu ───────────────────────────────────────
   void _showProfileMenu(BuildContext context, AuthService auth) {
     showModalBottomSheet(
       context: context,
@@ -349,14 +420,12 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
-  // ─── Greeting ─────────────────────────────────────────────────
   Widget _buildGreeting(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: Consumer<AuthService>(
         builder: (context, auth, _) {
           final String greeting = _getGreeting();
-
           if (!auth.isLoggedIn) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,7 +482,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
               ],
             );
           }
-
           final firstName = auth.user!.name.split(' ').first;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,7 +517,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
     return 'Selamat malam';
   }
 
-  // ─── DikariPay Card (hidden) ──────────────────────────────────
   Widget _buildWalletCard(BuildContext context) {
     return Container(
       width: double.infinity,
@@ -520,10 +587,11 @@ class _BerandaScreenState extends State<BerandaScreen> {
             ],
           ),
           ElevatedButton(
-            onPressed: () => _requireLogin(
-              context,
-              () => Navigator.of(context).pushNamed('/dikaripay'),
-            ),
+            onPressed: () => _requireLogin(context, () {
+              Navigator.of(context).pushNamed('/dikaripay').then((_) {
+                if (mounted) context.read<AuthService>().refreshUser();
+              });
+            }),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.surfaceContainerLowest,
               foregroundColor: AppTheme.primary,
@@ -543,7 +611,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
-  // ─── Weather Card ─────────────────────────────────────────────
   Widget _buildWeatherCard(BuildContext context) {
     const double temperature = 34;
     const String condition = 'Cerah Berawan';
@@ -563,17 +630,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        boxShadow: [
-          BoxShadow(
-            color:
-                (isHotWeather
-                        ? const Color(0xFFFF6B35)
-                        : const Color(0xFF42B4F5))
-                    .withOpacity(0.35),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -654,57 +710,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              children: [
-                const Text('🧊', style: TextStyle(fontSize: 20)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    isHotWeather
-                        ? 'Suhu panas! Waktunya cuci AC biar makin dingin.'
-                        : 'Cuaca sejuk, tapi AC tetap perlu dirawat rutin.',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _requireLogin(context, () {}),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Pesan',
-                      style: TextStyle(
-                        color: isHotWeather
-                            ? const Color(0xFFFF6B35)
-                            : AppTheme.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -743,48 +748,47 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
-  // ─── Service Grid ─────────────────────────────────────────────
   Widget _buildServiceGrid(BuildContext context) {
     final services = [
       {
         'title': 'Cuci Reguler',
-        'icon': Icons.ac_unit_rounded,
-        'color': Colors.blue,
+        'image': 'assets/images/services/cuci_reguler.png',
+        'route': '/order',
       },
       {
         'title': 'Cuci Langganan',
-        'icon': Icons.event_repeat_rounded,
-        'color': Colors.green,
+        'image': 'assets/images/services/cuci_langganan.png',
+        'route': null,
       },
       {
         'title': 'Perbaikan',
-        'icon': Icons.build_rounded,
-        'color': Colors.orange,
+        'image': 'assets/images/services/perbaikan.png',
+        'route': null,
       },
       {
         'title': 'Pasang Baru',
-        'icon': Icons.add_box_rounded,
-        'color': Colors.purple,
+        'image': 'assets/images/services/pasang_baru.png',
+        'route': '/order',
       },
       {
         'title': 'Relokasi',
-        'icon': Icons.call_made_rounded,
-        'color': Colors.red,
+        'image': 'assets/images/services/relokasi.png',
+        'route': '/order',
       },
       {
         'title': 'Beli + Pasang',
-        'icon': Icons.shopping_cart_checkout_rounded,
-        'color': Colors.teal,
+        'image': 'assets/images/services/beli_pasang.png',
+        'route': null,
       },
       {
         'title': 'AC Industri',
-        'icon': Icons.factory_rounded,
-        'color': Colors.blueGrey,
+        'image': 'assets/images/services/ac_industri.png',
+        'route': null,
       },
       {
         'title': 'Lainnya',
-        'icon': Icons.grid_view_rounded,
-        'color': Colors.grey,
+        'image': 'assets/images/services/lainnya.png',
+        'route': null,
       },
     ];
 
@@ -823,13 +827,23 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
-  Widget _buildServiceItem(BuildContext context, Map<String, Object> service) {
-    final Color iconColor = service['color'] as Color;
+  Widget _buildServiceItem(BuildContext context, Map<String, Object?> service) {
+    final String? route = service['route'] as String?;
+    final String imagePath = service['image'] as String;
+
     return GestureDetector(
       onTap: () => _requireLogin(context, () {
-        final title = service['title'] as String;
-        if (title == 'Cuci Reguler') {
-          Navigator.of(context).pushNamed('/order');
+        if (route != null) {
+          Navigator.of(context).pushNamed(route).then((_) {
+            if (mounted) context.read<AuthService>().refreshUser();
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Segera hadir!'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
         }
       }),
       child: SizedBox(
@@ -838,16 +852,43 @@ class _BerandaScreenState extends State<BerandaScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 52,
-              height: 52,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(14.0),
+                color: const Color.fromARGB(0, 255, 255, 255),
+                borderRadius: BorderRadius.circular(16.0),
+                boxShadow: [
+                  // Shadow bawah — efek utama 3D
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 6),
+                    spreadRadius: 0,
+                  ),
+                  // Shadow kanan — kesan kedalaman
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 6,
+                    offset: const Offset(4, 4),
+                    spreadRadius: 0,
+                  ),
+                  // Highlight atas kiri — efek cahaya
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.9),
+                    blurRadius: 4,
+                    offset: const Offset(-2, -2),
+                    spreadRadius: 0,
+                  ),
+                ],
               ),
-              child: Icon(
-                service['icon'] as IconData,
-                color: iconColor,
-                size: 26,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16.0),
+                child: Image.asset(
+                  imagePath,
+                  width: 56,
+                  height: 56,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -869,7 +910,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
-  // ─── Promo Carousel ───────────────────────────────────────────
   Widget _buildPromoCarousel(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1003,7 +1043,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
-  // ─── Testimonials ─────────────────────────────────────────────
+  // ─── Testimonials (dari API) ──────────────────────────────────
   Widget _buildTestimonials(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1019,28 +1059,161 @@ class _BerandaScreenState extends State<BerandaScreen> {
             ),
           ),
         ),
-        _buildTestimonialItem(
-          context,
-          initials: 'AN',
-          name: 'Andi Nurrahman',
-          service: 'Layanan: Cuci Reguler',
-          stars: 5,
-          text:
-              '"Teknisinya sangat sopan dan pengerjaannya sangat bersih. Gak ada air menetes sama sekali di lantai. Mantap Dikari!"',
-          borderColor: AppTheme.secondary,
-        ),
-        const SizedBox(height: 16),
-        _buildTestimonialItem(
-          context,
-          initials: 'SM',
-          name: 'Siska Maryati',
-          service: 'Layanan: Pasang Baru',
-          stars: 4,
-          text:
-              '"Respon cepat, pengerjaan instalasi rapi banget. Harga transparan sejak awal. Rekomendasi buat yang mau pasang AC baru."',
-          borderColor: AppTheme.primary,
-        ),
+        if (_loadingReviews)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (_reviews.isEmpty)
+          // Fallback hardcode kalau belum ada review
+          Column(
+            children: [
+              _buildTestimonialItem(
+                context,
+                initials: 'AN',
+                name: 'Andi Nurrahman',
+                service: 'Layanan: Cuci Reguler',
+                stars: 5,
+                text:
+                    '"Teknisinya sangat sopan dan pengerjaannya sangat bersih. Gak ada air menetes sama sekali di lantai. Mantap Dikari!"',
+                borderColor: AppTheme.secondary,
+              ),
+              const SizedBox(height: 16),
+              _buildTestimonialItem(
+                context,
+                initials: 'SM',
+                name: 'Siska Maryati',
+                service: 'Layanan: Pasang Baru',
+                stars: 4,
+                text:
+                    '"Respon cepat, pengerjaan instalasi rapi banget. Harga transparan sejak awal. Rekomendasi buat yang mau pasang AC baru."',
+                borderColor: AppTheme.primary,
+              ),
+            ],
+          )
+        else
+          Column(
+            children: _reviews.asMap().entries.map((entry) {
+              final i = entry.key;
+              final r = entry.value;
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: i < _reviews.length - 1 ? 16 : 0,
+                ),
+                child: _buildTestimonialFromApi(context, r),
+              );
+            }).toList(),
+          ),
       ],
+    );
+  }
+
+  Widget _buildTestimonialFromApi(BuildContext context, ReviewModel review) {
+    final borderColors = [
+      AppTheme.secondary,
+      AppTheme.primary,
+      Colors.teal,
+      Colors.purple,
+      Colors.orange,
+    ];
+    final borderColor = borderColors[review.id % borderColors.length];
+    final initials = review.customerName.isNotEmpty
+        ? review.customerName[0].toUpperCase()
+        : 'C';
+
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16.0),
+        border: Border(left: BorderSide(color: borderColor, width: 4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              review.customerAvatar != null
+                  ? CircleAvatar(
+                      radius: 18,
+                      backgroundImage: NetworkImage(review.customerAvatar!),
+                      onBackgroundImageError: (_, __) {},
+                    )
+                  : CircleAvatar(
+                      radius: 18,
+                      backgroundColor: AppTheme.surfaceContainerHighest,
+                      foregroundColor: AppTheme.primary,
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      review.customerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: AppTheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Teknisi: ${review.technicianName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(
+                  5,
+                  (i) => Icon(
+                    i < review.rating
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    color: Colors.amber,
+                    size: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '"${review.review}"',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppTheme.onSurfaceVariant,
+              fontStyle: FontStyle.italic,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            review.createdAt,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppTheme.onSurfaceVariant,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1064,49 +1237,48 @@ class _BerandaScreenState extends State<BerandaScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: AppTheme.surfaceContainerHighest,
-                    foregroundColor: AppTheme.primary,
-                    child: Text(
-                      initials,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: AppTheme.surfaceContainerHighest,
+                foregroundColor: AppTheme.primary,
+                child: Text(
+                  initials,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: AppTheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: AppTheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    Text(
+                      service,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.onSurfaceVariant,
+                        fontSize: 10,
                       ),
-                      Text(
-                        service,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppTheme.onSurfaceVariant,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: List.generate(
                   5,
-                  (index) => Icon(
-                    index < stars
-                        ? Icons.star_rounded
-                        : Icons.star_border_rounded,
+                  (i) => Icon(
+                    i < stars ? Icons.star_rounded : Icons.star_border_rounded,
                     color: Colors.amber,
-                    size: 16,
+                    size: 14,
                   ),
                 ),
               ),

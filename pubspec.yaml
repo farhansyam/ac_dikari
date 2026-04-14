@@ -40,7 +40,7 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/logo_acd.png"
+  image_path: "assets/images/logo_hitam.jpeg"
   min_sdk_android: 21
 
 flutter:
@@ -48,3 +48,4 @@ flutter:
 
   assets:
     - assets/images/logo_acd.png
+    - assets/images/services/
