@@ -42,11 +42,9 @@ class AuthService extends ChangeNotifier {
   // ─── Ganti dengan base URL backend Laravel kamu ───────────────
   // static const String _baseUrl = 'http://10.0.2.2:8000/api';
   // static const String _baseUrl = 'http://10.18.40.17:8000/api';
-  static const String _baseUrl =
-      'https://noegenetic-jiggly-lulu.ngrok-free.dev/api';
+  static const String _baseUrl = 'https://acdikari.app/api';
   static String get baseUrl => _baseUrl; // ← tambah ini
-  static const String _wilayahBase =
-      'https://noegenetic-jiggly-lulu.ngrok-free.dev';
+  static const String _wilayahBase = 'https://acdikari.app';
 
   // ─────────────────────────────────────────────────────────────
 

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
+import '../services/setting_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -433,19 +434,45 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Future<void> _launchWhatsApp(BuildContext context) async {
-    const phone = '085186846250';
-    const message = 'Halo Dikari, saya butuh bantuan mengenai layanan AC.';
-    final uri = Uri.parse(
-      'https://wa.me/62${phone.substring(1)}?text=${Uri.encodeComponent(message)}',
-    );
+    try {
+      final settings = await SettingService.getWaSettings();
+      final phone = settings['wa_cs'] ?? '';
+      final message =
+          settings['wa_message_cs'] ?? 'Halo Dikari, saya butuh bantuan.';
 
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+      if (phone.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Nomor CS belum tersedia.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+
+      final uri = Uri.parse(
+        'https://wa.me/$phone?text=${Uri.encodeComponent(message)}',
+      );
+
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('WhatsApp tidak ditemukan di perangkat ini.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('WhatsApp tidak ditemukan di perangkat ini.'),
+            content: Text('Gagal membuka WhatsApp.'),
             behavior: SnackBarBehavior.floating,
           ),
         );

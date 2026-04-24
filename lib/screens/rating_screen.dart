@@ -8,11 +8,16 @@ import '../services/auth_service.dart';
 class RatingScreen extends StatefulWidget {
   final int orderId;
   final String technicianName;
+  // Rating teknisi pasang (relokasi beda lokasi)
+  final String? secondTechnicianName;
+  final bool splitTechnician;
 
   const RatingScreen({
     Key? key,
     required this.orderId,
     required this.technicianName,
+    this.secondTechnicianName,
+    this.splitTechnician = false,
   }) : super(key: key);
 
   @override
@@ -20,25 +25,50 @@ class RatingScreen extends StatefulWidget {
 }
 
 class _RatingScreenState extends State<RatingScreen> {
+  // Rating teknisi pertama (bongkar / tunggal)
   int _rating = 0;
   final _reviewCtrl = TextEditingController();
+
+  // Rating teknisi pasang (relokasi beda lokasi)
+  int _secondRating = 0;
+  final _secondReviewCtrl = TextEditingController();
+
   bool _submitting = false;
+
+  bool get _hasSecondTech =>
+      widget.splitTechnician &&
+      widget.secondTechnicianName != null &&
+      widget.secondTechnicianName!.isNotEmpty;
 
   @override
   void dispose() {
     _reviewCtrl.dispose();
+    _secondReviewCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (_rating == 0) {
-      _showSnackBar('Pilih rating dulu.');
+      _showSnackBar('Pilih rating untuk ${widget.technicianName}.');
+      return;
+    }
+    if (_hasSecondTech && _secondRating == 0) {
+      _showSnackBar('Pilih rating untuk ${widget.secondTechnicianName}.');
       return;
     }
 
     setState(() => _submitting = true);
     try {
       final auth = context.read<AuthService>();
+      final body = <String, dynamic>{
+        'rating': _rating,
+        'review': _reviewCtrl.text.trim(),
+      };
+      if (_hasSecondTech) {
+        body['second_rating'] = _secondRating;
+        body['second_review'] = _secondReviewCtrl.text.trim();
+      }
+
       final response = await http.post(
         Uri.parse('${AuthService.baseUrl}/orders/${widget.orderId}/rating'),
         headers: {
@@ -46,10 +76,7 @@ class _RatingScreenState extends State<RatingScreen> {
           'Accept': 'application/json',
           'Authorization': 'Bearer ${auth.token}',
         },
-        body: jsonEncode({
-          'rating': _rating,
-          'review': _reviewCtrl.text.trim(),
-        }),
+        body: jsonEncode(body),
       );
 
       if (!mounted) return;
@@ -75,8 +102,8 @@ class _RatingScreenState extends State<RatingScreen> {
     );
   }
 
-  String get _ratingLabel {
-    switch (_rating) {
+  String _ratingLabel(int rating) {
+    switch (rating) {
       case 1:
         return 'Sangat Buruk 😞';
       case 2:
@@ -107,169 +134,29 @@ class _RatingScreenState extends State<RatingScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            // Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        widget.technicianName.isNotEmpty
-                            ? widget.technicianName[0].toUpperCase()
-                            : 'T',
-                        style: const TextStyle(
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 28,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Bagaimana pelayanan teknisi?',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.technicianName,
-                    style: TextStyle(
-                      color: AppTheme.onSurfaceVariant,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Bintang
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (i) {
-                      final star = i + 1;
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _rating = star),
-                          child: Icon(
-                            star <= _rating
-                                ? Icons.star_rounded
-                                : Icons.star_border_rounded,
-                            size: 40,
-                            color: star <= _rating
-                                ? Colors.amber
-                                : Colors.grey.shade300,
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 12),
-
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: Text(
-                      _ratingLabel,
-                      key: ValueKey(_rating),
-                      style: TextStyle(
-                        color: _rating > 0
-                            ? AppTheme.primary
-                            : AppTheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            // ─── Rating Teknisi Pertama ───────────────────────
+            _buildRatingCard(
+              techName: widget.technicianName,
+              label: _hasSecondTech ? 'Teknisi Bongkar' : null,
+              rating: _rating,
+              reviewCtrl: _reviewCtrl,
+              onRatingChanged: (v) => setState(() => _rating = v),
             ),
 
-            const SizedBox(height: 16),
-
-            // Ulasan
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+            // ─── Rating Teknisi Pasang (relokasi 2 teknisi) ───
+            if (_hasSecondTech) ...[
+              const SizedBox(height: 16),
+              _buildRatingCard(
+                techName: widget.secondTechnicianName!,
+                label: 'Teknisi Pasang',
+                rating: _secondRating,
+                reviewCtrl: _secondReviewCtrl,
+                onRatingChanged: (v) => setState(() => _secondRating = v),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Tulis Ulasan',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Ceritakan pengalaman kamu (opsional)',
-                    style: TextStyle(
-                      color: AppTheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _reviewCtrl,
-                    maxLines: 4,
-                    maxLength: 500,
-                    decoration: InputDecoration(
-                      hintText:
-                          'Contoh: Teknisi datang tepat waktu, AC bersih dan dingin lagi...',
-                      hintStyle: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 13,
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppTheme.primary,
-                          width: 2,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.all(14),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            ],
 
             const SizedBox(height: 24),
 
-            // Tombol submit
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -304,7 +191,6 @@ class _RatingScreenState extends State<RatingScreen> {
 
             const SizedBox(height: 12),
 
-            // Skip
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
               child: Text(
@@ -317,6 +203,151 @@ class _RatingScreenState extends State<RatingScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildRatingCard({
+    required String techName,
+    String? label,
+    required int rating,
+    required TextEditingController reviewCtrl,
+    required ValueChanged<int> onRatingChanged,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          if (label != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: AppTheme.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                techName.isNotEmpty ? techName[0].toUpperCase() : 'T',
+                style: const TextStyle(
+                  color: AppTheme.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 26,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Bagaimana pelayanan teknisi?',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            techName,
+            style: TextStyle(color: AppTheme.onSurfaceVariant, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+
+          // Bintang
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(5, (i) {
+              final star = i + 1;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onRatingChanged(star),
+                  child: Icon(
+                    star <= rating
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    size: 40,
+                    color: star <= rating ? Colors.amber : Colors.grey.shade300,
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 10),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: Text(
+              _ratingLabel(rating),
+              key: ValueKey(rating),
+              style: TextStyle(
+                color: rating > 0
+                    ? AppTheme.primary
+                    : AppTheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Review
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Tulis Ulasan (opsional)',
+              style: TextStyle(color: AppTheme.onSurfaceVariant, fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: reviewCtrl,
+            maxLines: 3,
+            maxLength: 500,
+            decoration: InputDecoration(
+              hintText: 'Ceritakan pengalaman kamu...',
+              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+            ),
+          ),
+        ],
       ),
     );
   }

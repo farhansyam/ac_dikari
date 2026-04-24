@@ -72,7 +72,6 @@ class MyApp extends StatelessWidget {
         '/privacy-policy': (_) => const PrivacyPolicyScreen(),
         '/alamat': (_) => const AddressScreen(),
         '/kontak': (_) => const PhoneScreen(),
-        '/order': (_) => const OrderFlowScreen(),
         '/pesanan': (_) => const PesananScreen(),
         '/dikaripay': (_) => const DikariPayScreen(),
       },
@@ -91,6 +90,8 @@ class MyApp extends StatelessWidget {
             builder: (_) => RatingScreen(
               orderId: args['orderId'],
               technicianName: args['technicianName'],
+              secondTechnicianName: args['secondTechnicianName'],
+              splitTechnician: args['splitTechnician'] ?? false,
             ),
           );
         }
@@ -98,6 +99,36 @@ class MyApp extends StatelessWidget {
           final orderId = settings.arguments as int;
           return MaterialPageRoute(
             builder: (_) => ComplaintScreen(orderId: orderId),
+          );
+        }
+        if (settings.name == '/order') {
+          return MaterialPageRoute(
+            builder: (_) =>
+                const OrderFlowScreen(orderType: OrderType.cuciReguler),
+          );
+        }
+        if (settings.name == '/pasang-baru') {
+          return MaterialPageRoute(
+            builder: (_) =>
+                const OrderFlowScreen(orderType: OrderType.pasangBaru),
+          );
+        }
+        if (settings.name == '/beli-pasang') {
+          return MaterialPageRoute(
+            builder: (_) =>
+                const OrderFlowScreen(orderType: OrderType.beliPasang),
+          );
+        }
+        if (settings.name == '/relokasi') {
+          return MaterialPageRoute(
+            builder: (_) =>
+                const OrderFlowScreen(orderType: OrderType.relokasi),
+          );
+        }
+        if (settings.name == '/perbaikan') {
+          return MaterialPageRoute(
+            builder: (_) =>
+                const OrderFlowScreen(orderType: OrderType.perbaikan),
           );
         }
         return null;

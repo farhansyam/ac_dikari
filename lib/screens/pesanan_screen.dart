@@ -42,8 +42,44 @@ class _PesananScreenState extends State<PesananScreen> {
             .where(
               (o) => [
                 'pending',
+                'pending_transport_fee',
+                'pending_transport_fee_set',
                 'confirmed',
                 'in_progress',
+                'survey_in_progress', // ← tambah
+                'waiting_customer_response', // ← tambah
+                'waiting_confirmation',
+                'warranty',
+                'complained',
+              ].contains(o.status),
+            )
+            .toList();
+        _orders = orders
+            .where(
+              (o) => [
+                'pending',
+                'pending_transport_fee',
+                'pending_transport_fee_set',
+                'confirmed',
+                'in_progress',
+                'survey_in_progress', // ← tambah
+                'waiting_customer_response', // ← tambah
+                'waiting_confirmation',
+                'warranty',
+                'complained',
+              ].contains(o.status),
+            )
+            .toList();
+        _orders = orders
+            .where(
+              (o) => [
+                'pending',
+                'pending_transport_fee',
+                'pending_transport_fee_set',
+                'confirmed',
+                'in_progress',
+                'survey_in_progress', // ← tambah
+                'waiting_customer_response', // ← tambah
                 'waiting_confirmation',
                 'warranty',
                 'complained',
@@ -295,6 +331,34 @@ class _PesananScreenState extends State<PesananScreen> {
                       color: Colors.orange,
                     ),
                   ],
+                  if (order.status == 'waiting_customer_response') ...[
+                    const SizedBox(height: 10),
+                    _buildBanner(
+                      icon: Icons.help_rounded,
+                      text: 'Hasil survey tersedia · Tap untuk lihat',
+                      color: Colors.purple,
+                    ),
+                  ],
+
+                  // Banner menunggu transport fee dari BP
+                  if (order.status == 'pending_transport_fee') ...[
+                    const SizedBox(height: 10),
+                    _buildBanner(
+                      icon: Icons.local_shipping_rounded,
+                      text: 'Menunggu biaya transportasi dari mitra',
+                      color: Colors.orange,
+                    ),
+                  ],
+
+                  // Banner konfirmasi transport fee
+                  if (order.status == 'pending_transport_fee_set') ...[
+                    const SizedBox(height: 10),
+                    _buildBanner(
+                      icon: Icons.local_shipping_rounded,
+                      text: 'Konfirmasi biaya transportasi →',
+                      color: Colors.deepOrange,
+                    ),
+                  ],
 
                   // Banner menunggu konfirmasi
                   if (order.status == 'waiting_confirmation') ...[
@@ -411,6 +475,26 @@ class _PesananScreenState extends State<PesananScreen> {
         color = Colors.orange.shade700;
         bgColor = Colors.orange.shade50;
         label = 'Dikomplain';
+        break;
+      case 'pending_transport_fee':
+        color = Colors.orange.shade700;
+        bgColor = Colors.orange.shade50;
+        label = 'Tunggu Transport';
+        break;
+      case 'pending_transport_fee_set':
+        color = Colors.deepOrange.shade700;
+        bgColor = Colors.deepOrange.shade50;
+        label = 'Konfirmasi Transport';
+        break;
+      case 'survey_in_progress':
+        color = Colors.indigo.shade700;
+        bgColor = Colors.indigo.shade50;
+        label = 'Survei Berlangsung';
+        break;
+      case 'waiting_customer_response':
+        color = Colors.purple.shade700;
+        bgColor = Colors.purple.shade50;
+        label = 'Menunggu Keputusanmu';
         break;
       default:
         color = Colors.grey.shade700;

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
+import '../services/setting_service.dart';
 
 // ─── Feature Flags ───────────────────────────────────────────────
 const bool _showDikariPay = true;
@@ -45,6 +46,46 @@ class ReviewModel {
   }
 }
 
+class ArticleModel {
+  final int id;
+  final String title;
+  final String subtitle;
+  final String type;
+  final String colorHex;
+  final String? imageUrl;
+  final String? content;
+
+  ArticleModel({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.type,
+    required this.colorHex,
+    this.imageUrl,
+    this.content,
+  });
+
+  factory ArticleModel.fromJson(Map<String, dynamic> json) {
+    return ArticleModel(
+      id: json['id'],
+      title: json['title'] ?? '',
+      subtitle: json['subtitle'] ?? '',
+      type: json['type'] ?? 'tips',
+      colorHex: json['color_hex'] ?? '#1976D2',
+      imageUrl: json['image_url'],
+      content: json['content'],
+    );
+  }
+
+  Color get color {
+    try {
+      return Color(int.parse(colorHex.replaceAll('#', '0xFF')));
+    } catch (_) {
+      return const Color(0xFF1976D2);
+    }
+  }
+}
+
 class BerandaScreen extends StatefulWidget {
   const BerandaScreen({Key? key}) : super(key: key);
 
@@ -57,12 +98,15 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
   bool _loadingLokasi = true;
   List<ReviewModel> _reviews = [];
   bool _loadingReviews = true;
+  List<ArticleModel> _articles = [];
+  bool _loadingArticles = true;
 
   @override
   void initState() {
     super.initState();
     _getLocation();
     _loadReviews();
+    _loadArticles();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<AuthService>().refreshUser();
     });
@@ -72,7 +116,30 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
     await Future.wait([
       context.read<AuthService>().refreshUser(),
       _loadReviews(),
+      _loadArticles(),
     ]);
+  }
+
+  Future<void> _loadArticles() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AuthService.baseUrl}/articles'),
+        headers: {'Accept': 'application/json'},
+      );
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _articles = (data['articles'] as List)
+              .map((e) => ArticleModel.fromJson(e))
+              .toList();
+          _loadingArticles = false;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingArticles = false);
+    }
   }
 
   Future<void> _loadReviews() async {
@@ -763,27 +830,28 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
       {
         'title': 'Perbaikan',
         'image': 'assets/images/services/perbaikan.png',
-        'route': null,
+        'route': '/perbaikan',
       },
       {
         'title': 'Pasang Baru',
         'image': 'assets/images/services/pasang_baru.png',
-        'route': '/order',
+        'route': '/pasang-baru',
       },
       {
         'title': 'Relokasi',
         'image': 'assets/images/services/relokasi.png',
-        'route': '/order',
+        'route': '/relokasi',
       },
-      {
-        'title': 'Beli + Pasang',
-        'image': 'assets/images/services/beli_pasang.png',
-        'route': null,
-      },
+      // {
+      //   'title': 'Beli + Pasang',
+      //   'image': 'assets/images/services/beli_pasang.png',
+      //   'route': '/beli-pasang',
+      // },
       {
         'title': 'AC Industri',
         'image': 'assets/images/services/ac_industri.png',
         'route': null,
+        'isWa': true,
       },
       {
         'title': 'Lainnya',
@@ -792,47 +860,80 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
       },
     ];
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(24.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    // Bagi services menjadi rows dengan 4 item per baris
+    final List<List<Map<String, Object?>>> rows = [];
+    for (int i = 0; i < services.length; i += 4) {
+      final end = (i + 4 > services.length) ? services.length : i + 4;
+      rows.add(services.sublist(i, end));
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Lebar tiap item = (lebar container - padding kiri/kanan - gap antar 4 kolom) / 4
+        final double totalPadding = 32; // 16 kiri + 16 kanan
+        final double totalGap = 8 * 3; // 3 gap antar 4 kolom
+        final double itemWidth =
+            (constraints.maxWidth - totalPadding - totalGap) / 4;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(24.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: services
-                .sublist(0, 4)
-                .map((s) => _buildServiceItem(context, s))
-                .toList(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: rows.asMap().entries.map((entry) {
+              final i = entry.key;
+              final row = entry.value;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (i > 0) const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 8,
+                    children: row.map((s) {
+                      return SizedBox(
+                        width: itemWidth,
+                        child: _buildServiceItem(context, s),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              );
+            }).toList(),
           ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: services
-                .sublist(4, 8)
-                .map((s) => _buildServiceItem(context, s))
-                .toList(),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildServiceItem(BuildContext context, Map<String, Object?> service) {
     final String? route = service['route'] as String?;
     final String imagePath = service['image'] as String;
+    final bool isWa = service['isWa'] as bool? ?? false;
 
     return GestureDetector(
-      onTap: () => _requireLogin(context, () {
+      onTap: () => _requireLogin(context, () async {
+        if (isWa) {
+          // Fetch nomor WA dan buka
+          final settings = await SettingService.getWaSettings();
+          final phone = settings['wa_ac_industri'] ?? '';
+          final message =
+              settings['wa_message_ac_industri'] ??
+              'Halo Dikari, saya ingin konsultasi AC Industri';
+          if (phone.isNotEmpty) {
+            await SettingService.openWhatsApp(phone, message);
+          }
+          return;
+        }
         if (route != null) {
           Navigator.of(context).pushNamed(route).then((_) {
             if (mounted) context.read<AuthService>().refreshUser();
@@ -846,33 +947,30 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
           );
         }
       }),
-      child: SizedBox(
-        width: 72,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Center(
+            child: Container(
               width: 56,
               height: 56,
               decoration: BoxDecoration(
                 color: const Color.fromARGB(0, 255, 255, 255),
                 borderRadius: BorderRadius.circular(16.0),
                 boxShadow: [
-                  // Shadow bawah — efek utama 3D
                   BoxShadow(
                     color: Colors.black.withOpacity(0.15),
                     blurRadius: 10,
                     offset: const Offset(0, 6),
                     spreadRadius: 0,
                   ),
-                  // Shadow kanan — kesan kedalaman
                   BoxShadow(
                     color: Colors.black.withOpacity(0.08),
                     blurRadius: 6,
                     offset: const Offset(4, 4),
                     spreadRadius: 0,
                   ),
-                  // Highlight atas kiri — efek cahaya
                   BoxShadow(
                     color: Colors.white.withOpacity(0.9),
                     blurRadius: 4,
@@ -891,8 +989,11 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
                 ),
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 28,
+            child: Text(
               service['title'] as String,
               textAlign: TextAlign.center,
               maxLines: 2,
@@ -904,8 +1005,8 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
                 height: 1.3,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -916,53 +1017,220 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Promo & Tips',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppTheme.onSurface,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              Text(
-                'Lihat Semua',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          child: Text(
+            'Promo & Tips',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: AppTheme.onSurface,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+        ),
+        if (_loadingArticles)
+          const SizedBox(
+            height: 160,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          )
+        else if (_articles.isEmpty)
+          // Fallback hardcode kalau belum ada artikel
+          SizedBox(
+            height: 160,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              children: [
+                _buildPromoCard(
+                  context,
                   color: AppTheme.primary,
+                  label: 'HOT PROMO',
+                  title: 'Promo Cuci AC\nhemat 20%',
+                  subtitle: 'Gunakan kode: DINGINHEMAT',
+                  icon: Icons.ac_unit_rounded,
+                ),
+                const SizedBox(width: 16),
+                _buildPromoCard(
+                  context,
+                  color: AppTheme.secondary,
+                  title: 'Tips merawat AC\nagar awet',
+                  subtitle: 'Pelajari caranya di sini',
+                  icon: Icons.tips_and_updates_rounded,
+                ),
+              ],
+            ),
+          )
+        else
+          SizedBox(
+            height: 160,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              itemCount: _articles.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
+              itemBuilder: (_, i) => _buildArticleCard(context, _articles[i]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildArticleCard(BuildContext context, ArticleModel article) {
+    return GestureDetector(
+      onTap: () {
+        if ((article.content ?? '').isNotEmpty) {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: Colors.transparent,
+            isScrollControlled: true,
+            builder: (_) => DraggableScrollableSheet(
+              initialChildSize: 0.6,
+              maxChildSize: 0.9,
+              minChildSize: 0.4,
+              builder: (_, controller) => Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: article.color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        article.type == 'promo' ? '🏷️ PROMO' : '💡 TIPS',
+                        style: TextStyle(
+                          color: article.color,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      article.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      article.subtitle,
+                      style: TextStyle(
+                        color: AppTheme.onSurfaceVariant,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      article.content ?? '',
+                      style: const TextStyle(fontSize: 14, height: 1.6),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+      },
+      child: Container(
+        width: 300,
+        padding: const EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24.0),
+          gradient: LinearGradient(
+            colors: [article.color, article.color.withOpacity(0.4)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: article.color.withOpacity(0.3),
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+            ),
+          ],
+          image: article.imageUrl != null
+              ? DecorationImage(
+                  image: NetworkImage(article.imageUrl!),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    article.color.withOpacity(0.7),
+                    BlendMode.srcOver,
+                  ),
+                )
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                article.type == 'promo' ? '🏷️ PROMO' : '💡 TIPS',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              article.title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                height: 1.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              article.subtitle,
+
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.white.withOpacity(0.85),
+              ),
+            ),
+            if ((article.content ?? '').isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Baca selengkapnya →',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 11,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ],
-          ),
+          ],
         ),
-        SizedBox(
-          height: 160,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            children: [
-              _buildPromoCard(
-                context,
-                color: AppTheme.primary,
-                label: 'HOT PROMO',
-                title: 'Promo Cuci AC\nhemat 20%',
-                subtitle: 'Gunakan kode: DINGINHEMAT',
-                icon: Icons.ac_unit_rounded,
-              ),
-              const SizedBox(width: 16),
-              _buildPromoCard(
-                context,
-                color: AppTheme.secondary,
-                title: 'Tips merawat AC\nagar awet',
-                subtitle: 'Pelajari caranya di sini',
-                icon: Icons.tips_and_updates_rounded,
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 
