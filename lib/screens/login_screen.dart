@@ -1,10 +1,21 @@
+import 'dart:io'; // ← untuk Platform.isIOS
+import 'package:sign_in_with_apple/sign_in_with_apple.dart'; // ← untuk SignInWithAppleButton
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../core/theme.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({Key? key}) : super(key: key);
+
+  void _launchPrivacyPolicy() async {
+    final uri = Uri.parse('https://acdikari.app/privacy-policy');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,12 +145,58 @@ class LoginScreen extends StatelessWidget {
               ),
 
               const SizedBox(height: 16),
-              Text(
-                'Dengan masuk, Anda menyetujui\nSyarat & Ketentuan serta Kebijakan Privasi kami.',
+              // ─── Apple Sign In Button (iOS only) ──────────────────────────
+              if (Platform.isIOS) ...[
+                const SizedBox(height: 12),
+                Consumer<AuthService>(
+                  builder: (context, auth, _) {
+                    return SizedBox(
+                      width: double.infinity,
+                      child: SignInWithAppleButton(
+                        onPressed: auth.isLoading
+                            ? () {}
+                            : () async {
+                                final success = await auth.signInWithApple();
+                                if (success && context.mounted) {
+                                  Navigator.of(
+                                    context,
+                                  ).pushReplacementNamed('/home');
+                                }
+                              },
+                        style: SignInWithAppleButtonStyle.black,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    );
+                  },
+                ),
+              ],
+
+              // ─── Privacy Policy Link ───────────────────────
+              RichText(
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppTheme.onSurfaceVariant,
-                  height: 1.6,
+                text: TextSpan(
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppTheme.onSurfaceVariant,
+                    height: 1.6,
+                  ),
+                  children: [
+                    const TextSpan(
+                      text:
+                          'Dengan masuk, Anda menyetujui\nSyarat & Ketentuan serta ',
+                    ),
+                    TextSpan(
+                      text: 'Kebijakan Privasi',
+                      style: TextStyle(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                        decorationColor: AppTheme.primary,
+                      ),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = _launchPrivacyPolicy,
+                    ),
+                    const TextSpan(text: ' kami.'),
+                  ],
                 ),
               ),
 

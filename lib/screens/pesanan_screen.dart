@@ -17,6 +17,20 @@ class _PesananScreenState extends State<PesananScreen> {
   List<OrderModel> _orders = [];
   bool _loading = true;
   String? _error;
+  int? _cancellingOrderId;
+
+  static const _activeStatuses = [
+    'pending',
+    'pending_transport_fee',
+    'pending_transport_fee_set',
+    'confirmed',
+    'in_progress',
+    'survey_in_progress',
+    'waiting_customer_response',
+    'waiting_confirmation',
+    'warranty',
+    'complained',
+  ];
 
   @override
   void initState() {
@@ -39,52 +53,7 @@ class _PesananScreenState extends State<PesananScreen> {
       if (!mounted) return;
       setState(() {
         _orders = orders
-            .where(
-              (o) => [
-                'pending',
-                'pending_transport_fee',
-                'pending_transport_fee_set',
-                'confirmed',
-                'in_progress',
-                'survey_in_progress', // ← tambah
-                'waiting_customer_response', // ← tambah
-                'waiting_confirmation',
-                'warranty',
-                'complained',
-              ].contains(o.status),
-            )
-            .toList();
-        _orders = orders
-            .where(
-              (o) => [
-                'pending',
-                'pending_transport_fee',
-                'pending_transport_fee_set',
-                'confirmed',
-                'in_progress',
-                'survey_in_progress', // ← tambah
-                'waiting_customer_response', // ← tambah
-                'waiting_confirmation',
-                'warranty',
-                'complained',
-              ].contains(o.status),
-            )
-            .toList();
-        _orders = orders
-            .where(
-              (o) => [
-                'pending',
-                'pending_transport_fee',
-                'pending_transport_fee_set',
-                'confirmed',
-                'in_progress',
-                'survey_in_progress', // ← tambah
-                'waiting_customer_response', // ← tambah
-                'waiting_confirmation',
-                'warranty',
-                'complained',
-              ].contains(o.status),
-            )
+            .where((o) => _activeStatuses.contains(o.status))
             .toList();
         _loading = false;
       });
@@ -94,6 +63,63 @@ class _PesananScreenState extends State<PesananScreen> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _cancelOrder(OrderModel order) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Batalkan Pesanan?'),
+        content: Text(
+          'Pesanan #${order.id} akan dibatalkan. Tindakan ini tidak dapat dibatalkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Tidak'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Ya, Batalkan'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _cancellingOrderId = order.id);
+    try {
+      await _orderService.cancelOrder(order.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Pesanan #${order.id} berhasil dibatalkan.'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
+      await _loadOrders();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _cancellingOrderId = null);
     }
   }
 
@@ -202,6 +228,10 @@ class _PesananScreenState extends State<PesananScreen> {
   }
 
   Widget _buildOrderCard(OrderModel order) {
+    final isCancelling = _cancellingOrderId == order.id;
+    final canCancel =
+        order.paymentStatus == 'unpaid' && order.status == 'pending';
+
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
@@ -221,6 +251,7 @@ class _PesananScreenState extends State<PesananScreen> {
         ),
         child: Column(
           children: [
+            // ─── Header ────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               decoration: BoxDecoration(
@@ -250,11 +281,14 @@ class _PesananScreenState extends State<PesananScreen> {
                 ],
               ),
             ),
+
+            // ─── Body ──────────────────────────────────────
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Item list
                   ...order.items
                       .take(2)
                       .map(
@@ -289,6 +323,7 @@ class _PesananScreenState extends State<PesananScreen> {
                   Divider(height: 1, color: Colors.grey.shade100),
                   const SizedBox(height: 10),
 
+                  // Jadwal + total
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -320,7 +355,7 @@ class _PesananScreenState extends State<PesananScreen> {
                     ],
                   ),
 
-                  // Banner belum bayar
+                  // ─── Banner belum bayar + tombol batalkan ──
                   if (order.paymentStatus == 'unpaid' &&
                       order.status != 'cancelled') ...[
                     const SizedBox(height: 10),
@@ -330,7 +365,58 @@ class _PesananScreenState extends State<PesananScreen> {
                       trailing: 'Bayar Sekarang →',
                       color: Colors.orange,
                     ),
+                    // Tombol batalkan — hanya saat status masih pending
+                    if (canCancel) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: isCancelling
+                              ? null
+                              : () => _cancelOrder(order),
+                          icon: isCancelling
+                              ? SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.red.shade400,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.cancel_outlined,
+                                  size: 16,
+                                  color: Colors.red.shade600,
+                                ),
+                          label: Text(
+                            isCancelling
+                                ? 'Membatalkan...'
+                                : 'Batalkan Pesanan',
+                            style: TextStyle(
+                              color: isCancelling
+                                  ? Colors.grey
+                                  : Colors.red.shade600,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: isCancelling
+                                  ? Colors.grey.shade300
+                                  : Colors.red.shade300,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
+
+                  // ─── Banner lainnya ───────────────────────
                   if (order.status == 'waiting_customer_response') ...[
                     const SizedBox(height: 10),
                     _buildBanner(
@@ -339,8 +425,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       color: Colors.purple,
                     ),
                   ],
-
-                  // Banner menunggu transport fee dari BP
                   if (order.status == 'pending_transport_fee') ...[
                     const SizedBox(height: 10),
                     _buildBanner(
@@ -349,8 +433,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       color: Colors.orange,
                     ),
                   ],
-
-                  // Banner konfirmasi transport fee
                   if (order.status == 'pending_transport_fee_set') ...[
                     const SizedBox(height: 10),
                     _buildBanner(
@@ -359,8 +441,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       color: Colors.deepOrange,
                     ),
                   ],
-
-                  // Banner menunggu konfirmasi
                   if (order.status == 'waiting_confirmation') ...[
                     const SizedBox(height: 10),
                     _buildBanner(
@@ -369,8 +449,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       color: Colors.green,
                     ),
                   ],
-
-                  // Banner masa garansi
                   if (order.status == 'warranty') ...[
                     const SizedBox(height: 10),
                     _buildBanner(
@@ -379,8 +457,6 @@ class _PesananScreenState extends State<PesananScreen> {
                       color: Colors.teal,
                     ),
                   ],
-
-                  // Banner dikomplain
                   if (order.status == 'complained') ...[
                     const SizedBox(height: 10),
                     _buildBanner(

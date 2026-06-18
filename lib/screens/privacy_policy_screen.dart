@@ -50,6 +50,24 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           _buildSection(
             context,
+            title: 'DikarPay & Sistem Saldo',
+            content:
+                'DikarPay adalah fitur saldo prepaid yang tersedia di aplikasi Dikari. Saldo DikarPay hanya dapat digunakan untuk membayar layanan jasa AC Dikari dan tidak dapat digunakan untuk pembelian konten digital. Saldo tidak dapat dipindahtangankan ke pengguna lain.',
+          ),
+          _buildSection(
+            context,
+            title: 'Kebijakan Pengembalian Saldo',
+            content:
+                'Saldo DikarPay yang telah diisi tidak dapat dikembalikan dalam bentuk uang tunai, kecuali terdapat kesalahan teknis dari pihak Dikari. Jika terjadi kendala pembayaran atau transaksi gagal, saldo akan dikembalikan otomatis dalam 1x24 jam. Untuk pengaduan, hubungi tim kami melalui WhatsApp.',
+          ),
+          _buildSection(
+            context,
+            title: 'Pembayaran & Keamanan Transaksi',
+            content:
+                'Semua transaksi top-up DikarPay diproses melalui payment gateway yang telah tersertifikasi. Kami tidak menyimpan data kartu kredit atau rekening bank Anda. Seluruh transaksi dienkripsi dan diproses secara aman.',
+          ),
+          _buildSection(
+            context,
             title: 'Hak Anda',
             content:
                 'Anda berhak untuk mengakses, memperbarui, atau menghapus informasi pribadi Anda kapan saja. Untuk menghapus akun dan semua data terkait, silakan hubungi tim dukungan kami melalui WhatsApp.',
@@ -68,7 +86,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Terakhir diperbarui: Januari 2025',
+            'Terakhir diperbarui: Mei 2025',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: AppTheme.onSurfaceVariant,
               fontSize: 11,

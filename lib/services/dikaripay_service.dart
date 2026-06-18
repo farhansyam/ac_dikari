@@ -102,4 +102,17 @@ class DikariPayService {
     if (response.statusCode == 200) return data;
     throw Exception(data['message'] ?? 'Gagal membayar dengan DikariPay.');
   }
+
+  Future<Map<String, dynamic>> paySubscription({
+    required int subscriptionId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/dikaripay/pay-subscription'),
+      headers: _headers,
+      body: jsonEncode({'subscription_id': subscriptionId}),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200) return data;
+    throw Exception(data['message'] ?? 'Gagal membayar dengan DikariPay.');
+  }
 }

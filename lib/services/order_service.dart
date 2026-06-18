@@ -49,6 +49,10 @@ class ServiceModel {
   bool get isRelokasi => category == 'relokasi';
   bool get isPerbaikanSurvey => category == 'service_perbaikan_survey';
   bool get isPerbaikanService => category == 'service_perbaikan_service';
+  bool get isHomeCare => category == 'home_care';
+  bool get isCarWash => category == 'car_wash';
+  bool get isMassage => category == 'massage';
+  bool get isOtherService => isHomeCare || isCarWash || isMassage;
 }
 
 class OrderItemInput {

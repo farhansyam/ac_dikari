@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
 import '../services/setting_service.dart';
+import '../services/order_service.dart';
 
 // ─── Feature Flags ───────────────────────────────────────────────
 const bool _showDikariPay = true;
@@ -825,7 +826,7 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
       {
         'title': 'Cuci Langganan',
         'image': 'assets/images/services/cuci_langganan.png',
-        'route': null,
+        'route': '/langganan-baru',
       },
       {
         'title': 'Perbaikan',
@@ -842,11 +843,6 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
         'image': 'assets/images/services/relokasi.png',
         'route': '/relokasi',
       },
-      // {
-      //   'title': 'Beli + Pasang',
-      //   'image': 'assets/images/services/beli_pasang.png',
-      //   'route': '/beli-pasang',
-      // },
       {
         'title': 'AC Industri',
         'image': 'assets/images/services/ac_industri.png',
@@ -854,12 +850,19 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
         'isWa': true,
       },
       {
+        'title': 'Konsultasi',
+        'image': null,
+        'icon': Icons.support_agent_rounded,
+        'route': '/konsultasi',
+      },
+      {
         'title': 'Lainnya',
-        'image': 'assets/images/services/lainnya.png',
+        'image': null,
+        'icon': Icons.grid_view_rounded,
         'route': null,
+        'isLainnya': true,
       },
     ];
-
     // Bagi services menjadi rows dengan 4 item per baris
     final List<List<Map<String, Object?>>> rows = [];
     for (int i = 0; i < services.length; i += 4) {
@@ -917,13 +920,17 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
 
   Widget _buildServiceItem(BuildContext context, Map<String, Object?> service) {
     final String? route = service['route'] as String?;
-    final String imagePath = service['image'] as String;
+    final String? imagePath = service['image'] as String?; // ← nullable
+    final IconData? iconData = service['icon'] as IconData?; // ← tambah
     final bool isWa = service['isWa'] as bool? ?? false;
 
     return GestureDetector(
       onTap: () => _requireLogin(context, () async {
+        final bool isWa = service['isWa'] as bool? ?? false;
+        final bool isLainnya = service['isLainnya'] as bool? ?? false;
+        final String? route = service['route'] as String?;
+
         if (isWa) {
-          // Fetch nomor WA dan buka
           final settings = await SettingService.getWaSettings();
           final phone = settings['wa_ac_industri'] ?? '';
           final message =
@@ -934,6 +941,12 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
           }
           return;
         }
+
+        if (isLainnya) {
+          _showLainnyaSheet(context);
+          return;
+        }
+
         if (route != null) {
           Navigator.of(context).pushNamed(route).then((_) {
             if (mounted) context.read<AuthService>().refreshUser();
@@ -956,7 +969,9 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: const Color.fromARGB(0, 255, 255, 255),
+                color: iconData != null
+                    ? AppTheme.primary.withOpacity(0.08)
+                    : const Color.fromARGB(0, 255, 255, 255),
                 borderRadius: BorderRadius.circular(16.0),
                 boxShadow: [
                   BoxShadow(
@@ -981,12 +996,14 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16.0),
-                child: Image.asset(
-                  imagePath,
-                  width: 56,
-                  height: 56,
-                  fit: BoxFit.cover,
-                ),
+                child: iconData != null
+                    ? Icon(iconData, color: AppTheme.primary, size: 28)
+                    : Image.asset(
+                        imagePath!,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                      ),
               ),
             ),
           ),
@@ -1070,6 +1087,187 @@ class _BerandaScreenState extends State<BerandaScreen> with RouteAware {
             ),
           ),
       ],
+    );
+  }
+
+  Future<void> _showLainnyaSheet(BuildContext context) async {
+    final auth = context.read<AuthService>();
+    Map<String, bool> hasService = {
+      'home_care': false,
+      'car_wash': false,
+      'massage': false,
+    };
+
+    try {
+      final orderService = OrderService(
+        baseUrl: AuthService.baseUrl,
+        authService: auth,
+      );
+      final result = await orderService.getServices();
+      final List<ServiceModel> allServices = result['services'];
+      for (final s in allServices) {
+        if (hasService.containsKey(s.category)) {
+          hasService[s.category] = true;
+        }
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    final lainnyaItems = [
+      {
+        'title': 'Home Care',
+        'subtitle': 'Layanan kebersihan rumah profesional',
+        'icon': Icons.home_outlined,
+        'category': 'home_care',
+        'route': '/home-care',
+      },
+      {
+        'title': 'Car Wash Home Service',
+        'subtitle': 'Cuci mobil tanpa keluar rumah',
+        'icon': Icons.local_car_wash_outlined,
+        'category': 'car_wash',
+        'route': '/car-wash',
+      },
+      {
+        'title': 'Massage Home Service',
+        'subtitle': 'Pijat profesional di rumah Anda',
+        'icon': Icons.spa_outlined,
+        'category': 'massage',
+        'route': '/massage',
+      },
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Layanan Lainnya',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Layanan profesional langsung ke rumah Anda',
+              style: TextStyle(color: AppTheme.onSurfaceVariant, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            ...lainnyaItems.map((item) {
+              final category = item['category'] as String;
+              final available = hasService[category] ?? false;
+              final route = item['route'] as String;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (available) {
+                      Navigator.of(context).pushNamed(route).then((_) {
+                        if (mounted) context.read<AuthService>().refreshUser();
+                      });
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Segera hadir di area Anda!'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  tileColor: available
+                      ? AppTheme.primary.withOpacity(0.05)
+                      : Colors.grey.shade50,
+                  leading: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: available
+                          ? AppTheme.primary.withOpacity(0.1)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      item['icon'] as IconData,
+                      color: available
+                          ? AppTheme.primary
+                          : Colors.grey.shade400,
+                      size: 24,
+                    ),
+                  ),
+                  title: Text(
+                    item['title'] as String,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: available
+                          ? AppTheme.onSurface
+                          : Colors.grey.shade500,
+                    ),
+                  ),
+                  subtitle: Text(
+                    item['subtitle'] as String,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.onSurfaceVariant,
+                    ),
+                  ),
+                  trailing: available
+                      ? Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: AppTheme.primary,
+                        )
+                      : Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Text(
+                            'Segera',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                        ),
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
     );
   }
 

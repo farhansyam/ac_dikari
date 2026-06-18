@@ -3,7 +3,8 @@ import '../core/theme.dart';
 import 'beranda_screen.dart';
 import 'profile_screen.dart';
 import 'pesanan_screen.dart';
-import 'riwayat_screen.dart'; // ← tambah import
+import 'riwayat_screen.dart';
+import 'subscription_list_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -18,8 +19,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = [
     const BerandaScreen(),
     const PesananScreen(),
+    const SubscriptionListScreen(),
     const RiwayatScreen(),
-    const ProfileScreen(), // ← ganti dari placeholder
+    const ProfileScreen(),
   ];
 
   @override
@@ -39,7 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -57,12 +59,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 _buildNavItem(
                   2,
+                  Icons.calendar_month_rounded,
+                  Icons.calendar_month_outlined,
+                  'Langganan',
+                ),
+                _buildNavItem(
+                  3,
                   Icons.history_rounded,
                   Icons.history_outlined,
                   'Riwayat',
                 ),
                 _buildNavItem(
-                  3,
+                  4,
                   Icons.person_rounded,
                   Icons.person_outline_rounded,
                   'Profil',
@@ -87,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: isActive
               ? AppTheme.primary.withOpacity(0.1)
@@ -106,29 +114,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                 color: isActive ? AppTheme.primary : AppTheme.onSurfaceVariant,
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderScreen extends StatelessWidget {
-  final String label;
-  const _PlaceholderScreen({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
       ),
     );

@@ -7,6 +7,102 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:461868507755:android:989873b4eee2c0b5c4c72e",
+        "android_client_info": {
+          "package_name": "com.acdikari.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "461868507755-h7ah2tlqkptooameoq424vug27ade81q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.acdikari.app",
+            "certificate_hash": "02404cc692e39d170b42beaa82b62959747801bd"
+          }
+        },
+        {
+          "client_id": "461868507755-kp75asmtq8udp7v207murdvm764niaco.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.acdikari.app",
+            "certificate_hash": "02970f11836b1c814625877d5cb4687462047428"
+          }
+        },
+        {
+          "client_id": "461868507755-lfh87sqdrndempupi70htbod5efpq8fp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.acdikari.app",
+            "certificate_hash": "8075d6707d0f5cb1e46c549036ee18a7959afa7a"
+          }
+        },
+        {
+          "client_id": "461868507755-aeaa2jg3113n95s3058lt8j8fdnq404l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1bSH5y9Gy9FBbtqbP5gYa36eStozkbR8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "461868507755-aeaa2jg3113n95s3058lt8j8fdnq404l.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "461868507755-an6sghg8lalo0dbljm4gmjmr0p1d3h7e.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.acDikariMitra"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:461868507755:android:b9fe26e335274f1ac4c72e",
+        "android_client_info": {
+          "package_name": "com.dikari.mitra"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "461868507755-aeaa2jg3113n95s3058lt8j8fdnq404l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1bSH5y9Gy9FBbtqbP5gYa36eStozkbR8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "461868507755-aeaa2jg3113n95s3058lt8j8fdnq404l.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "461868507755-an6sghg8lalo0dbljm4gmjmr0p1d3h7e.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.acDikariMitra"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:461868507755:android:f80a7eef5834de29c4c72e",
         "android_client_info": {
           "package_name": "com.example.ac_dikari"
@@ -37,6 +133,13 @@
             {
               "client_id": "461868507755-aeaa2jg3113n95s3058lt8j8fdnq404l.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "461868507755-an6sghg8lalo0dbljm4gmjmr0p1d3h7e.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.acDikariMitra"
+              }
             }
           ]
         }

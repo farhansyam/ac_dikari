@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
@@ -74,13 +75,7 @@ class _DikariPayScreenState extends State<DikariPayScreen> {
   }
 
   String _formatCurrency(double amount) {
-    final formatted = amount
-        .toStringAsFixed(0)
-        .replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]}.',
-        );
-    return 'Rp $formatted';
+    return 'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
   }
 
   @override
@@ -101,6 +96,7 @@ class _DikariPayScreenState extends State<DikariPayScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  // ─── Kartu saldo ─────────────────────────
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -175,6 +171,8 @@ class _DikariPayScreenState extends State<DikariPayScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  // ─── Riwayat transaksi ────────────────────
                   Text(
                     'Riwayat Transaksi',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -325,6 +323,10 @@ class _TopupSheetState extends State<_TopupSheet> {
   bool _loadingChannels = true;
   bool _processing = false;
 
+  // Inline error state — tidak pakai SnackBar dari dalam sheet
+  String? _amountError;
+  String? _channelError;
+
   final List<int> _quickAmounts = [10000, 20000, 50000, 100000, 200000, 500000];
 
   @override
@@ -353,36 +355,55 @@ class _TopupSheetState extends State<_TopupSheet> {
     }
   }
 
+  /// Validasi nominal — return pesan error, atau null jika valid
+  String? _validateAmount(String raw) {
+    final cleaned = raw.trim();
+    if (cleaned.isEmpty) return 'Nominal tidak boleh kosong';
+    // Cegah leading zero (misal "010000")
+    if (cleaned.length > 1 && cleaned.startsWith('0')) {
+      return 'Nominal tidak valid';
+    }
+    final amount = int.tryParse(cleaned);
+    if (amount == null || amount == 0) return 'Masukkan nominal yang valid';
+    if (amount < 10000) return 'Minimum topup Rp 10.000';
+    return null;
+  }
+
   Future<void> _topup() async {
-    final amountStr = _amountCtrl.text.replaceAll('.', '').trim();
-    final amount = int.tryParse(amountStr) ?? 0;
-
-    if (amount < 10000) {
-      _showSnackBar('Minimum topup Rp 10.000');
+    // ── Validasi nominal inline ──
+    final amountErr = _validateAmount(_amountCtrl.text);
+    if (amountErr != null) {
+      setState(() => _amountError = amountErr);
       return;
     }
 
+    // ── Validasi metode pembayaran inline ──
     if (_selectedChannel == null) {
-      _showSnackBar('Pilih metode pembayaran');
+      setState(() => _channelError = 'Pilih metode pembayaran terlebih dahulu');
       return;
     }
 
-    setState(() => _processing = true);
+    setState(() {
+      _amountError = null;
+      _channelError = null;
+      _processing = true;
+    });
 
     try {
+      final amount = int.parse(_amountCtrl.text.trim());
+
       final result = await widget.dikariPayService.topup(
         amount: amount,
         paymentMethod: _selectedChannel!.code,
       );
 
       if (!mounted) return;
+      setState(() => _processing = false);
 
       final paymentUrl = result['payment_url'] as String?;
       if (paymentUrl != null) {
-        // Tutup bottom sheet dulu
-        Navigator.of(context).pop(false);
-        // Buka payment screen
-        if (!mounted) return;
+        // Push PaymentWebView langsung dari context sheet — sheet ada di background
+        // Saat PaymentWebView selesai, baru pop sheet dengan hasilnya
         final paid = await Navigator.push<bool>(
           context,
           MaterialPageRoute(
@@ -390,27 +411,23 @@ class _TopupSheetState extends State<_TopupSheet> {
                 PaymentWebViewScreen(paymentUrl: paymentUrl, orderId: 0),
           ),
         );
-        // Kalau sudah bayar, pop sheet dengan true untuk refresh saldo
         if (!mounted) return;
-        if (paid == true) {
-          Navigator.of(context).pop(true);
-        }
+        // Pop sheet — true = bayar sukses, false = belum bayar
+        Navigator.of(context).pop(paid == true);
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _processing = false);
-      _showSnackBar(e.toString());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
-  void _showSnackBar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-    );
-  }
-
-  String _formatCurrency(int amount) {
+  String _formatDisplay(int amount) {
     return amount.toString().replaceAllMapped(
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
       (m) => '${m[1]}.',
@@ -433,6 +450,7 @@ class _TopupSheetState extends State<_TopupSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Handle bar
             Center(
               child: Container(
                 width: 40,
@@ -451,6 +469,8 @@ class _TopupSheetState extends State<_TopupSheet> {
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
+
+            // ─── Input nominal ────────────────────────────
             Text(
               'Nominal',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -462,42 +482,68 @@ class _TopupSheetState extends State<_TopupSheet> {
             TextFormField(
               controller: _amountCtrl,
               keyboardType: TextInputType.number,
+              // Hanya angka — tidak boleh huruf atau karakter lain
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (val) {
+                // Validasi real-time — error langsung muncul/hilang saat ketik
+                setState(() => _amountError = _validateAmount(val));
+              },
               decoration: InputDecoration(
                 hintText: 'Masukkan nominal topup',
                 prefixText: 'Rp ',
                 hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 filled: true,
-                fillColor: Colors.grey.shade50,
+                fillColor: _amountError != null
+                    ? Colors.red.shade50
+                    : Colors.grey.shade50,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
+                  borderSide: BorderSide(
+                    color: _amountError != null
+                        ? Colors.red.shade300
+                        : Colors.grey.shade200,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppTheme.primary,
+                  borderSide: BorderSide(
+                    color: _amountError != null
+                        ? Colors.red.shade400
+                        : AppTheme.primary,
                     width: 2,
                   ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.red.shade300),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.red.shade400, width: 2),
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 14,
                 ),
+                errorText: _amountError,
               ),
             ),
             const SizedBox(height: 12),
+
+            // ─── Quick amounts ────────────────────────────
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: _quickAmounts.map((amount) {
                 return GestureDetector(
-                  onTap: () => setState(
-                    () => _amountCtrl.text = _formatCurrency(amount),
-                  ),
+                  onTap: () => setState(() {
+                    _amountCtrl.text = amount.toString();
+                    _amountError = null; // nominal cepat selalu valid
+                  }),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
@@ -511,7 +557,7 @@ class _TopupSheetState extends State<_TopupSheet> {
                       ),
                     ),
                     child: Text(
-                      'Rp ${_formatCurrency(amount)}',
+                      'Rp ${_formatDisplay(amount)}',
                       style: TextStyle(
                         color: AppTheme.primary,
                         fontSize: 12,
@@ -523,6 +569,8 @@ class _TopupSheetState extends State<_TopupSheet> {
               }).toList(),
             ),
             const SizedBox(height: 20),
+
+            // ─── Metode pembayaran ────────────────────────
             Text(
               'Metode Pembayaran',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -539,26 +587,39 @@ class _TopupSheetState extends State<_TopupSheet> {
                 isExpanded: true,
                 decoration: InputDecoration(
                   filled: true,
-                  fillColor: Colors.grey.shade50,
+                  fillColor: _channelError != null
+                      ? Colors.red.shade50
+                      : Colors.grey.shade50,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(color: Colors.grey.shade200),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
+                    borderSide: BorderSide(
+                      color: _channelError != null
+                          ? Colors.red.shade300
+                          : Colors.grey.shade200,
+                    ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: AppTheme.primary,
+                    borderSide: BorderSide(
+                      color: _channelError != null
+                          ? Colors.red.shade400
+                          : AppTheme.primary,
                       width: 2,
                     ),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.red.shade300),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 14,
                   ),
+                  errorText: _channelError,
                 ),
                 hint: Text(
                   'Pilih metode',
@@ -572,9 +633,14 @@ class _TopupSheetState extends State<_TopupSheet> {
                       ),
                     )
                     .toList(),
-                onChanged: (ch) => setState(() => _selectedChannel = ch),
+                onChanged: (ch) => setState(() {
+                  _selectedChannel = ch;
+                  _channelError = null; // hapus error saat dipilih
+                }),
               ),
             const SizedBox(height: 24),
+
+            // ─── Tombol lanjut bayar ──────────────────────
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(

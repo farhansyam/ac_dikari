@@ -253,7 +253,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            // Icon
             Container(
               width: 48,
               height: 48,
@@ -268,8 +267,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
               ),
             ),
             const SizedBox(width: 14),
-
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,8 +313,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
                 ],
               ),
             ),
-
-            // Menu
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'edit') _showForm(phone: phone);
@@ -398,7 +393,6 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
   bool _isPrimary = false;
   bool _saving = false;
 
-  // Label suggestions
   final List<String> _labelSuggestions = [
     'HP Utama',
     'WhatsApp',
@@ -424,6 +418,33 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
     _labelCtrl.dispose();
     _phoneCtrl.dispose();
     super.dispose();
+  }
+
+  /// Validasi nomor HP — return pesan error atau null jika valid
+  String? _validatePhone(String? v) {
+    if (v == null || v.trim().isEmpty) {
+      return 'Nomor telepon wajib diisi.';
+    }
+
+    final trimmed = v.trim();
+
+    // Harus diawali 0 atau + (format Indonesia: 08xx atau +628xx)
+    if (!trimmed.startsWith('0') && !trimmed.startsWith('+')) {
+      return 'Nomor harus diawali 0 (misal 0812) atau +62.';
+    }
+
+    // Hitung digit saja — strip semua karakter non-digit
+    final digitsOnly = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (digitsOnly.length < 10) {
+      return 'Nomor minimal 10 digit (misal: 0812-3456-7890).';
+    }
+
+    if (digitsOnly.length > 15) {
+      return 'Nomor terlalu panjang (maksimal 15 digit).';
+    }
+
+    return null;
   }
 
   Future<void> _submit() async {
@@ -492,7 +513,6 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
                 ),
                 const SizedBox(height: 20),
 
-                // Title
                 Text(
                   _isEdit ? 'Edit Nomor' : 'Tambah Nomor',
                   style: Theme.of(
@@ -501,7 +521,7 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
                 ),
                 const SizedBox(height: 20),
 
-                // Label field
+                // ─── Label ────────────────────────────────
                 Text(
                   'Label',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -512,8 +532,9 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _labelCtrl,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Label wajib diisi.' : null,
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Label wajib diisi.'
+                      : null,
                   decoration: _inputDecoration(
                     hint: 'Contoh: HP Utama, WhatsApp',
                     icon: Icons.label_rounded,
@@ -543,7 +564,7 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
                 ),
                 const SizedBox(height: 16),
 
-                // Phone number field
+                // ─── Nomor telepon ────────────────────────
                 Text(
                   'Nomor Telepon',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -551,22 +572,23 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
                     color: AppTheme.onSurfaceVariant,
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  'Format: 08xx-xxxx-xxxx atau +628xx-xxxx-xxxx',
+                  style: TextStyle(
+                    color: AppTheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.phone,
+                  // Hanya angka, +, -, dan spasi — huruf diblokir
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]')),
                   ],
-                  validator: (v) {
-                    if (v == null || v.isEmpty) {
-                      return 'Nomor telepon wajib diisi.';
-                    }
-                    if (v.replaceAll(RegExp(r'[^0-9]'), '').length < 9) {
-                      return 'Nomor terlalu pendek.';
-                    }
-                    return null;
-                  },
+                  validator: _validatePhone,
                   decoration: _inputDecoration(
                     hint: '08xx xxxx xxxx',
                     icon: Icons.phone_rounded,
@@ -574,7 +596,7 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
                 ),
                 const SizedBox(height: 16),
 
-                // Primary switch
+                // ─── Jadikan utama ────────────────────────
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -610,7 +632,7 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
                 ),
                 const SizedBox(height: 24),
 
-                // Submit button
+                // ─── Tombol simpan ────────────────────────
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -675,6 +697,10 @@ class _PhoneFormSheetState extends State<_PhoneFormSheet> {
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Colors.red),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.red, width: 2),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );

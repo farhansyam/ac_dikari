@@ -85,12 +85,11 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Navigate to home after splash
+    // Selalu ke home setelah splash
     Future.delayed(const Duration(milliseconds: 3200), () {
-      if (mounted) {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
+      if (!mounted) return;
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      Navigator.of(context).pushReplacementNamed('/home');
     });
   }
 
@@ -237,7 +236,6 @@ class _PulsingDotsState extends State<_PulsingDots>
         return AnimatedBuilder(
           animation: _dotController,
           builder: (context, child) {
-            // Each dot offset by 0.2 phase
             final double phase = ((_dotController.value - i * 0.2) % 1.0);
             final double scale = phase < 0.5
                 ? 0.6 + (phase / 0.5) * 0.6

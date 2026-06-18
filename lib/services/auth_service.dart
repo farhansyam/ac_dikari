@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:math';
+import 'package:crypto/crypto.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -136,6 +139,85 @@ class AuthService extends ChangeNotifier {
         return true;
       } else {
         _errorMessage = data['message'] ?? 'Login gagal.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Terjadi kesalahan: ${e.toString()}';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ─── Apple Sign In ────────────────────────────────────────────
+  String _generateNonce([int length = 32]) {
+    const chars =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => chars[random.nextInt(chars.length)],
+    ).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  Future<bool> signInWithApple() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+
+      // Gabungkan nama (Apple kirim terpisah: givenName + familyName)
+      final fullName = [
+        appleCredential.givenName ?? '',
+        appleCredential.familyName ?? '',
+      ].where((s) => s.isNotEmpty).join(' ');
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/apple'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Device-Type': 'mobile',
+        },
+        body: jsonEncode({
+          'identity_token': appleCredential.identityToken,
+          'user_identifier': appleCredential.userIdentifier,
+          if (appleCredential.email != null) 'email': appleCredential.email,
+          if (fullName.isNotEmpty) 'full_name': fullName,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        _token = data['token'];
+        _user = UserModel.fromJson(data['user']);
+        await _storage.write(key: 'auth_token', value: _token);
+        await _saveFcmToken();
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = data['message'] ?? 'Login Apple gagal.';
         _isLoading = false;
         notifyListeners();
         return false;

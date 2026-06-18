@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'core/theme.dart';
+import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'services/order_service.dart';
@@ -20,19 +21,29 @@ import 'screens/pesanan_screen.dart';
 import 'screens/dikaripay_screen.dart';
 import 'screens/rating_screen.dart';
 import 'screens/complaint_screen.dart';
+import 'screens/subscription_flow_screen.dart';
+import 'screens/subscription_list_screen.dart';
+import 'screens/subscription_detail_screen.dart';
+import 'screens/konsultasi_screen.dart';
 
 // ─── Background handler ───────────────────────────────────────────
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  await NotificationService().init();
+
+  // ─── NotificationService dijalankan tanpa blocking runApp ────────
+  // Kalau getToken() / requestPermission() hang di iOS (APNs belum
+  // dikonfigurasi di Firebase Console), app tetap bisa jalan normal.
+  NotificationService().init().catchError((e) {
+    debugPrint('[NotificationService] init error: $e');
+  });
 
   GoogleFonts.config.allowRuntimeFetching = true;
 
@@ -74,6 +85,7 @@ class MyApp extends StatelessWidget {
         '/kontak': (_) => const PhoneScreen(),
         '/pesanan': (_) => const PesananScreen(),
         '/dikaripay': (_) => const DikariPayScreen(),
+        '/langganan': (_) => const SubscriptionListScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/payment') {
@@ -83,7 +95,6 @@ class MyApp extends StatelessWidget {
             builder: (_) => PaymentScreen(order: order),
           );
         }
-        // Di onGenerateRoute:
         if (settings.name == '/rating') {
           final args = settings.arguments as Map<String, dynamic>;
           return MaterialPageRoute(
@@ -131,6 +142,48 @@ class MyApp extends StatelessWidget {
                 const OrderFlowScreen(orderType: OrderType.perbaikan),
           );
         }
+        if (settings.name == '/home-care') {
+          return MaterialPageRoute(
+            builder: (_) => const OrderFlowScreen(
+              orderType: OrderType.cuciReguler,
+              categoryFilter: 'home_care',
+              customTitle: 'Home Care',
+            ),
+          );
+        }
+        if (settings.name == '/car-wash') {
+          return MaterialPageRoute(
+            builder: (_) => const OrderFlowScreen(
+              orderType: OrderType.cuciReguler,
+              categoryFilter: 'car_wash',
+              customTitle: 'Car Wash Home Service',
+            ),
+          );
+        }
+        if (settings.name == '/massage') {
+          return MaterialPageRoute(
+            builder: (_) => const OrderFlowScreen(
+              orderType: OrderType.cuciReguler,
+              categoryFilter: 'massage',
+              customTitle: 'Massage Home Service',
+            ),
+          );
+        }
+        if (settings.name == '/konsultasi') {
+          return MaterialPageRoute(builder: (_) => const KonsultasiScreen());
+        }
+        if (settings.name == '/langganan-baru') {
+          return MaterialPageRoute(
+            builder: (_) => const SubscriptionFlowScreen(),
+          );
+        }
+        if (settings.name == '/langganan-detail') {
+          final id = settings.arguments as int;
+          return MaterialPageRoute(
+            builder: (_) => SubscriptionDetailScreen(subscriptionId: id),
+          );
+        }
+
         return null;
       },
     );

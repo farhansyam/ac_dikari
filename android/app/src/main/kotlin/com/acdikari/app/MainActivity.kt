@@ -1,5 +1,6 @@
-package com.example.ac_dikari
+package com.acdikari.app
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+    

@@ -130,6 +130,10 @@ class NotificationService {
       case 'balance_released':
         Navigator.of(context).pushNamed('/pesanan');
         break;
+      case 'subscription_confirmed':
+      case 'subscription_session_assigned':
+        Navigator.of(context).pushNamed('/langganan');
+        break;
     }
   }
 

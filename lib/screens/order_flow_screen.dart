@@ -11,9 +11,14 @@ enum OrderType { cuciReguler, pasangBaru, beliPasang, relokasi, perbaikan }
 
 class OrderFlowScreen extends StatefulWidget {
   final OrderType orderType;
-  const OrderFlowScreen({Key? key, this.orderType = OrderType.cuciReguler})
-    : super(key: key);
-
+  final String? categoryFilter; // ← tambah
+  final String? customTitle; // ← tambah
+  const OrderFlowScreen({
+    Key? key,
+    this.orderType = OrderType.cuciReguler,
+    this.categoryFilter, // ← tambah
+    this.customTitle, // ← tambah
+  }) : super(key: key);
   @override
   State<OrderFlowScreen> createState() => _OrderFlowScreenState();
 }
@@ -79,6 +84,7 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
   int get _totalSteps => _isPerbaikan ? 4 : (_isRelokasi ? 4 : 3);
 
   String get _screenTitle {
+    if (widget.customTitle != null) return widget.customTitle!;
     switch (widget.orderType) {
       case OrderType.pasangBaru:
         return 'Pasang Baru';
@@ -94,6 +100,7 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
   }
 
   String get _jasaCategory {
+    if (widget.categoryFilter != null) return widget.categoryFilter!;
     switch (widget.orderType) {
       case OrderType.pasangBaru:
       case OrderType.beliPasang:

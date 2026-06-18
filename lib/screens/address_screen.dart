@@ -23,7 +23,7 @@ class _AddressScreenState extends State<AddressScreen> {
     super.initState();
     final auth = context.read<AuthService>();
     _addressService = AddressService(
-      baseUrl: '${AuthService.baseUrl}',
+      baseUrl: AuthService.baseUrl,
       authService: auth,
     );
     _loadAddresses();
@@ -56,16 +56,19 @@ class _AddressScreenState extends State<AddressScreen> {
       await _loadAddresses();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showSnackBar(e.toString());
     }
   }
 
   Future<void> _deleteAddress(AddressModel address) async {
+    // TC-13/5: Guard di Flutter — alamat utama tidak bisa dihapus
+    if (address.isPrimary) {
+      _showSnackBar(
+        'Alamat utama tidak bisa dihapus. Jadikan alamat lain sebagai utama terlebih dahulu.',
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -92,21 +95,19 @@ class _AddressScreenState extends State<AddressScreen> {
       await _addressService.deleteAddress(address.id);
       await _loadAddresses();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Alamat berhasil dihapus.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showSnackBar('Alamat berhasil dihapus.');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      // TC-13/4: Pesan dari backend sudah friendly — langsung tampilkan
+      _showSnackBar(e.toString());
     }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
   }
 
   void _goToForm({AddressModel? address}) async {
@@ -262,7 +263,7 @@ class _AddressScreenState extends State<AddressScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
+            // ─── Header ──────────────────────────────────
             Row(
               children: [
                 Text(
@@ -331,6 +332,7 @@ class _AddressScreenState extends State<AddressScreen> {
                         ],
                       ),
                     ),
+                    // "Jadikan Utama" hanya muncul jika bukan alamat utama
                     if (!address.isPrimary)
                       const PopupMenuItem(
                         value: 'primary',
@@ -342,29 +344,32 @@ class _AddressScreenState extends State<AddressScreen> {
                           ],
                         ),
                       ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_rounded,
-                            size: 18,
-                            color: Colors.red,
-                          ),
-                          SizedBox(width: 8),
-                          Text('Hapus', style: TextStyle(color: Colors.red)),
-                        ],
+                    // TC-13/5: "Hapus" hanya muncul jika bukan alamat utama
+                    if (!address.isPrimary)
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_rounded,
+                              size: 18,
+                              color: Colors.red,
+                            ),
+                            SizedBox(width: 8),
+                            Text('Hapus', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ],
             ),
+
             const SizedBox(height: 12),
             Divider(height: 1, color: Colors.grey.shade100),
             const SizedBox(height: 12),
 
-            // Alamat
+            // ─── Alamat ───────────────────────────────────
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -386,7 +391,7 @@ class _AddressScreenState extends State<AddressScreen> {
               ],
             ),
 
-            // Koordinat GPS
+            // ─── Koordinat GPS ────────────────────────────
             if (address.latitude != null && address.longitude != null) ...[
               const SizedBox(height: 6),
               Row(
