@@ -218,6 +218,20 @@ class ProfileScreen extends StatelessWidget {
                     onTap: () => _confirmLogout(context, auth),
                   ),
                 ]),
+
+                const SizedBox(height: 16),
+
+                // ─── Hapus Akun (Guideline 5.1.1(v)) ───────────
+                _buildMenuCard(context, [
+                  _MenuItem(
+                    icon: Icons.delete_forever_rounded,
+                    color: Colors.red.shade700,
+                    title: 'Hapus Akun',
+                    subtitle: 'Hapus akun & data Anda secara permanen',
+                    titleColor: Colors.red.shade700,
+                    onTap: () => _confirmDeleteAccountStep1(context, auth),
+                  ),
+                ]),
               ],
             ),
           ),
@@ -638,6 +652,188 @@ class ProfileScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // ─── Hapus Akun — Step 1: Peringatan awal ─────────────────────
+  void _confirmDeleteAccountStep1(BuildContext context, AuthService auth) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.warning_rounded,
+                color: Colors.red.shade700,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Hapus Akun Secara Permanen?',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tindakan ini tidak dapat dibatalkan. Seluruh data berikut akan dihapus permanen:\n\n'
+              '• Data profil & informasi akun\n'
+              '• Riwayat pesanan layanan\n'
+              '• Saldo DikariPay\n'
+              '• Alamat & nomor kontak tersimpan\n\n'
+              'Anda tidak akan bisa mengembalikan akun ini setelah dihapus.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppTheme.onSurfaceVariant,
+                height: 1.6,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text('Batal'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _confirmDeleteAccountStep2(context, auth);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Lanjutkan',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Hapus Akun — Step 2: Konfirmasi final ────────────────────
+  void _confirmDeleteAccountStep2(BuildContext context, AuthService auth) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Konfirmasi Terakhir',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Apakah Anda benar-benar yakin ingin menghapus akun ini secara permanen?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _executeDeleteAccount(context, auth);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            child: const Text(
+              'Ya, Hapus Akun Saya',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Eksekusi penghapusan akun ─────────────────────────────────
+  Future<void> _executeDeleteAccount(
+    BuildContext context,
+    AuthService auth,
+  ) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final success = await auth.deleteAccount();
+
+    if (context.mounted) {
+      Navigator.pop(context); // tutup loading indicator
+    }
+
+    if (success) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Akun Anda telah berhasil dihapus.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Gagal menghapus akun. Silakan coba lagi atau hubungi dukungan.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 }
 

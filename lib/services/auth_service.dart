@@ -93,6 +93,67 @@ class AuthService extends ChangeNotifier {
     } catch (_) {}
   }
 
+  // ─── Email + Password Sign In (khusus iOS, untuk demo reviewer Apple) ──
+  Future<bool> signInWithEmail(String email, String password) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/login-email'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Device-Type': 'mobile',
+        },
+        body: jsonEncode({'email': email, 'password': password}),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        _token = data['token'];
+        _user = UserModel.fromJson(data['user']);
+        await _storage.write(key: 'auth_token', value: _token);
+        await _saveFcmToken();
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = data['message'] ?? 'Login gagal.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Terjadi kesalahan: ${e.toString()}';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteAccount() async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$_baseUrl/auth/account'),
+        headers: {
+          'Authorization': 'Bearer $_token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        await _clearSession();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ─── Google Sign In ───────────────────────────────────────────
   Future<bool> signInWithGoogle() async {
     _isLoading = true;
