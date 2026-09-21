@@ -219,7 +219,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
       setState(() => _paying = false);
 
       final paymentUrl = result['payment_url'] as String?;
-      if (paymentUrl != null) {
+      if (paymentUrl != null && paymentUrl.isNotEmpty) {
+        // Redirect / e-wallet / QR → buka WebView screen
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -231,6 +232,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
         );
         if (!mounted) return;
         Navigator.of(context).pop(); // balik ke order detail
+      } else {
+        // payment_url kosong/null — kemungkinan metode direct (VA, dll)
+        // yang instruksinya muncul dari order detail, bukan redirect.
+        // Tampilkan pesan dan biarkan user kembali manual.
+        _showSnackBar(
+          result['message'] as String? ??
+              'Transaksi dibuat. Cek detail pembayaran di halaman pesanan.',
+        );
       }
     } catch (e) {
       if (!mounted) return;

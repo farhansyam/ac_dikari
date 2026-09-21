@@ -80,9 +80,34 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
 
     final uri = Uri.parse(widget.paymentUrl);
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      bool launched = false;
+      final scheme = uri.scheme.toLowerCase();
+
+      if (scheme == 'http' || scheme == 'https') {
+        // URL biasa → buka di browser eksternal
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        // Deep link e-wallet (gojek://, dana://, shopee://, dll)
+        // → langsung open app, bukan browser
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalNonBrowserApplication,
+        );
+        if (!launched) {
+          // Fallback ke browser kalau app tidak ada
+          launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
+
       if (!mounted) return;
-      setState(() => _browserOpened = true);
+      if (launched) {
+        setState(() {
+          _browserOpened = true;
+          _hasChecked = false; // reset agar lifecycle bisa trigger check lagi
+        });
+      } else {
+        _showSnackBar('Tidak bisa membuka halaman pembayaran.');
+      }
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Tidak bisa membuka browser: $e');
