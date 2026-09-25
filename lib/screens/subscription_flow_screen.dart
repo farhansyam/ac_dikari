@@ -21,11 +21,6 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
   final _pageController = PageController();
   int _currentStep = 0;
   static const int _totalSteps = 5;
-  // Step 0: Alamat & Kontak
-  // Step 1: Pilih Paket
-  // Step 2: Pilih Service
-  // Step 3: Atur Jadwal
-  // Step 4: Preview & Bayar
 
   late SubscriptionService _subService;
   late AddressService _addressService;
@@ -44,7 +39,7 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
   List<SubscriptionPackageModel> _packages = [];
   SubscriptionPackageModel? _selectedPackage;
   bool _loadingPackages = false;
-  double _minBasePrice = 0; // harga minimum layanan di area customer
+  double _minBasePrice = 0;
 
   // Step 2
   List<SubscriptionServiceItem> _services = [];
@@ -69,7 +64,7 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
   bool _submitting = false;
   SubscriptionModel? _createdSubscription;
 
-  // Step 4 — Jadwal
+  // Step 4
   List<DateTime?> _scheduleDates = [];
   List<String?> _scheduleTimes = [];
   bool _savingSchedule = false;
@@ -152,9 +147,6 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
     }
   }
 
-  /// Load packages + services sekaligus (parallel).
-  /// Services di-load di sini supaya harga estimasi bisa ditampilkan
-  /// langsung di step 1 (pilih paket), sebelum user masuk step 2.
   Future<void> _loadPackages() async {
     if (_packages.isNotEmpty) return;
     setState(() => _loadingPackages = true);
@@ -191,7 +183,6 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
 
   Future<void> _loadServices() async {
     if (_selectedAddress == null) return;
-    // Services sudah di-load parallel di _loadPackages — skip reload
     if (_services.isNotEmpty && _bpId != null) return;
 
     setState(() {
@@ -352,21 +343,28 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
 
       // ─── Tripay: buka webview ─────────────────────────────
       setState(() => _submitting = false);
-      if (sub.tripayPaymentUrl != null) {
-        final paid = await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PaymentWebViewScreen(
-              paymentUrl: sub.tripayPaymentUrl!,
-              orderId: sub.id,
-            ),
+
+      if (sub.tripayPaymentUrl == null) {
+        _snack('URL pembayaran tidak tersedia. Coba lagi.');
+        return;
+      }
+
+      final paid = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaymentWebViewScreen(
+            paymentUrl: sub.tripayPaymentUrl!,
+            orderId: sub.id,
+            isSubscription: true, // ← cek status ke /subscriptions/{id}
           ),
-        );
-        if (paid == true && mounted) {
-          await _saveScheduleAfterPaid(sub.id);
-        } else if (mounted) {
-          _snack('Pembayaran belum selesai.');
-        }
+        ),
+      );
+
+      if (!mounted) return;
+      if (paid == true) {
+        await _saveScheduleAfterPaid(sub.id);
+      } else {
+        _snack('Pembayaran belum selesai. Cek status di halaman Langganan.');
       }
     } catch (e) {
       if (!mounted) return;
@@ -854,7 +852,6 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
                             ),
                           ],
                         ),
-                        // ─── Estimasi harga ─────────────────
                         if (_minBasePrice > 0) ...[
                           const SizedBox(height: 6),
                           Row(
@@ -895,7 +892,6 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
                               ),
                             ),
                         ],
-                        // ────────────────────────────────────
                         if ((pkg.description ?? '').isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(
@@ -1327,7 +1323,7 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
-        // ─── Ringkasan langganan ─────────────────────────────
+        // ─── Ringkasan ───────────────────────────────────────
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -1542,7 +1538,7 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
         ),
         const SizedBox(height: 20),
 
-        // ─── DikariPay option ────────────────────────────────
+        // ─── DikariPay ───────────────────────────────────────
         GestureDetector(
           onTap: cukupDikariPay
               ? () => setState(() {
@@ -1808,7 +1804,6 @@ class _SubscriptionFlowScreenState extends State<SubscriptionFlowScreen> {
       'Lihat Ringkasan',
       'Bayar Sekarang',
     ];
-
     final showTotal = _currentStep == 4 && _preview != null;
 
     return Container(

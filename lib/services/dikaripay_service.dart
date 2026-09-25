@@ -2,6 +2,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
+// Exception khusus saat user belum punya nomor HP
+class PhoneMissingException implements Exception {
+  final String message;
+  PhoneMissingException(this.message);
+  @override
+  String toString() => message;
+}
+
 class DikariPayTransaction {
   final int id;
   final String type;
@@ -86,6 +94,12 @@ class DikariPayService {
     );
     final data = jsonDecode(response.body);
     if (response.statusCode == 200) return data;
+
+    // 422 = validasi gagal, khusus phone missing
+    if (response.statusCode == 422) {
+      throw PhoneMissingException(data['message'] ?? 'Nomor HP belum diisi.');
+    }
+
     throw Exception(data['message'] ?? 'Gagal membuat topup.');
   }
 

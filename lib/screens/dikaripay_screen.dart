@@ -323,7 +323,6 @@ class _TopupSheetState extends State<_TopupSheet> {
   bool _loadingChannels = true;
   bool _processing = false;
 
-  // Inline error state — tidak pakai SnackBar dari dalam sheet
   String? _amountError;
   String? _channelError;
 
@@ -355,29 +354,121 @@ class _TopupSheetState extends State<_TopupSheet> {
     }
   }
 
-  /// Validasi nominal — return pesan error, atau null jika valid
   String? _validateAmount(String raw) {
     final cleaned = raw.trim();
     if (cleaned.isEmpty) return 'Nominal tidak boleh kosong';
-    // Cegah leading zero (misal "010000")
-    if (cleaned.length > 1 && cleaned.startsWith('0')) {
+    if (cleaned.length > 1 && cleaned.startsWith('0'))
       return 'Nominal tidak valid';
-    }
     final amount = int.tryParse(cleaned);
     if (amount == null || amount == 0) return 'Masukkan nominal yang valid';
     if (amount < 10000) return 'Minimum topup Rp 10.000';
     return null;
   }
 
+  // Pakai dialog bukan SnackBar — SnackBar di dalam bottom sheet
+  // muncul di belakang sheet (tidak keliatan user)
+  Future<void> _showError(String message) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Gagal',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showPhoneMissingDialog(String message) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.phone_android_rounded,
+                color: Colors.orange.shade600,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Nomor HP Belum Diisi',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppTheme.onSurfaceVariant, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(); // tutup dialog
+                  Navigator.of(dialogContext).pop(); // tutup bottom sheet
+                  Navigator.of(context).pushNamed('/kontak');
+                },
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text(
+                  'Tambah Nomor HP',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Nanti Saja'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _topup() async {
-    // ── Validasi nominal inline ──
     final amountErr = _validateAmount(_amountCtrl.text);
     if (amountErr != null) {
       setState(() => _amountError = amountErr);
       return;
     }
 
-    // ── Validasi metode pembayaran inline ──
     if (_selectedChannel == null) {
       setState(() => _channelError = 'Pilih metode pembayaran terlebih dahulu');
       return;
@@ -400,10 +491,14 @@ class _TopupSheetState extends State<_TopupSheet> {
       if (!mounted) return;
       setState(() => _processing = false);
 
-      final paymentUrl = result['payment_url'] as String?;
-      if (paymentUrl != null) {
-        // Push PaymentWebView langsung dari context sheet — sheet ada di background
-        // Saat PaymentWebView selesai, baru pop sheet dengan hasilnya
+      final paymentUrl =
+          (result['payment_url'] ??
+                  result['redirect_url'] ??
+                  result['pay_url'] ??
+                  result['checkout_url'])
+              as String?;
+
+      if (paymentUrl != null && paymentUrl.isNotEmpty) {
         final paid = await Navigator.push<bool>(
           context,
           MaterialPageRoute(
@@ -412,18 +507,24 @@ class _TopupSheetState extends State<_TopupSheet> {
           ),
         );
         if (!mounted) return;
-        // Pop sheet — true = bayar sukses, false = belum bayar
         Navigator.of(context).pop(paid == true);
+      } else {
+        final message = result['message'] as String?;
+        await _showError(
+          message?.isNotEmpty == true
+              ? message!
+              : 'URL pembayaran tidak tersedia untuk metode ini.',
+        );
       }
+    } on PhoneMissingException catch (e) {
+      // Error khusus: user belum punya nomor HP
+      if (!mounted) return;
+      setState(() => _processing = false);
+      await _showPhoneMissingDialog(e.message);
     } catch (e) {
       if (!mounted) return;
       setState(() => _processing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      await _showError(e.toString());
     }
   }
 
@@ -450,7 +551,6 @@ class _TopupSheetState extends State<_TopupSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Handle bar
             Center(
               child: Container(
                 width: 40,
@@ -482,10 +582,8 @@ class _TopupSheetState extends State<_TopupSheet> {
             TextFormField(
               controller: _amountCtrl,
               keyboardType: TextInputType.number,
-              // Hanya angka — tidak boleh huruf atau karakter lain
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               onChanged: (val) {
-                // Validasi real-time — error langsung muncul/hilang saat ketik
                 setState(() => _amountError = _validateAmount(val));
               },
               decoration: InputDecoration(
@@ -542,7 +640,7 @@ class _TopupSheetState extends State<_TopupSheet> {
                 return GestureDetector(
                   onTap: () => setState(() {
                     _amountCtrl.text = amount.toString();
-                    _amountError = null; // nominal cepat selalu valid
+                    _amountError = null;
                   }),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -635,7 +733,7 @@ class _TopupSheetState extends State<_TopupSheet> {
                     .toList(),
                 onChanged: (ch) => setState(() {
                   _selectedChannel = ch;
-                  _channelError = null; // hapus error saat dipilih
+                  _channelError = null;
                 }),
               ),
             const SizedBox(height: 24),

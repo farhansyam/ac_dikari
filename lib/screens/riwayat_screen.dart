@@ -20,6 +20,11 @@ class _RiwayatScreenState extends State<RiwayatScreen>
   bool _loading = true;
   String? _error;
 
+  // ─── Search & Filter ──────────────────────────────────────
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+  String _timeFilter = 'all'; // all | month | 3months
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +40,7 @@ class _RiwayatScreenState extends State<RiwayatScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -62,7 +68,44 @@ class _RiwayatScreenState extends State<RiwayatScreen>
   }
 
   List<OrderModel> _filteredOrders(String status) {
-    return _orders.where((o) => o.status == status).toList();
+    var result = _orders.where((o) => o.status == status).toList();
+
+    // ─── Filter waktu ─────────────────────────────────────
+    if (_timeFilter != 'all') {
+      final now = DateTime.now();
+      final cutoff = _timeFilter == 'month'
+          ? DateTime(now.year, now.month, 1)
+          : now.subtract(const Duration(days: 90));
+
+      result = result.where((o) {
+        try {
+          final date = DateTime.parse(o.scheduledDate);
+          return date.isAfter(cutoff);
+        } catch (_) {
+          return true;
+        }
+      }).toList();
+    }
+
+    // ─── Filter search ────────────────────────────────────
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      result = result.where((o) {
+        // Cari berdasarkan ID order
+        if (o.id.toString().contains(q)) return true;
+        // Cari berdasarkan nama layanan
+        return o.items.any(
+          (item) => (item['name'] as String? ?? '').toLowerCase().contains(q),
+        );
+      }).toList();
+    }
+
+    return result;
+  }
+
+  void _clearSearch() {
+    _searchCtrl.clear();
+    setState(() => _searchQuery = '');
   }
 
   String _formatCurrency(double amount) {
@@ -105,10 +148,102 @@ class _RiwayatScreenState extends State<RiwayatScreen>
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? _buildError()
-          : TabBarView(
-              controller: _tabController,
-              children: [_buildList('completed'), _buildList('cancelled')],
+          : Column(
+              children: [
+                _buildSearchAndFilter(),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildList('completed'),
+                      _buildList('cancelled'),
+                    ],
+                  ),
+                ),
+              ],
             ),
+    );
+  }
+
+  // ─── Search bar + filter chips ─────────────────────────────
+  Widget _buildSearchAndFilter() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        children: [
+          // Search bar
+          TextField(
+            controller: _searchCtrl,
+            onChanged: (val) => setState(() => _searchQuery = val.trim()),
+            decoration: InputDecoration(
+              hintText: 'Cari order ID atau nama layanan...',
+              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? GestureDetector(
+                      onTap: _clearSearch,
+                      child: const Icon(Icons.close_rounded, size: 18),
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppTheme.primary,
+                  width: 1.5,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Filter chips
+          Row(
+            children: [
+              _buildFilterChip('Semua', 'all'),
+              const SizedBox(width: 8),
+              _buildFilterChip('Bulan Ini', 'month'),
+              const SizedBox(width: 8),
+              _buildFilterChip('3 Bulan', '3months'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, String value) {
+    final isSelected = _timeFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _timeFilter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primary : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : AppTheme.onSurfaceVariant,
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
     );
   }
 
@@ -142,6 +277,8 @@ class _RiwayatScreenState extends State<RiwayatScreen>
     final orders = _filteredOrders(status);
 
     if (orders.isEmpty) {
+      // Beda pesan kalau kosong karena search/filter atau memang kosong
+      final isFiltering = _searchQuery.isNotEmpty || _timeFilter != 'all';
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -154,7 +291,9 @@ class _RiwayatScreenState extends State<RiwayatScreen>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                status == 'completed'
+                isFiltering
+                    ? Icons.search_off_rounded
+                    : status == 'completed'
                     ? Icons.task_alt_rounded
                     : Icons.cancel_outlined,
                 size: 40,
@@ -163,13 +302,25 @@ class _RiwayatScreenState extends State<RiwayatScreen>
             ),
             const SizedBox(height: 16),
             Text(
-              status == 'completed'
+              isFiltering
+                  ? 'Tidak ada hasil ditemukan'
+                  : status == 'completed'
                   ? 'Belum Ada Riwayat Selesai'
                   : 'Belum Ada Pesanan Dibatalkan',
               style: Theme.of(
                 context,
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
+            if (isFiltering) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  _clearSearch();
+                  setState(() => _timeFilter = 'all');
+                },
+                child: const Text('Reset Pencarian'),
+              ),
+            ],
           ],
         ),
       );
@@ -265,7 +416,6 @@ class _RiwayatScreenState extends State<RiwayatScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Layanan
                   ...order.items
                       .take(2)
                       .map(
@@ -298,11 +448,9 @@ class _RiwayatScreenState extends State<RiwayatScreen>
                   const SizedBox(height: 10),
                   Divider(height: 1, color: Colors.grey.shade100),
                   const SizedBox(height: 10),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Tanggal
                       Row(
                         children: [
                           Icon(
@@ -320,7 +468,6 @@ class _RiwayatScreenState extends State<RiwayatScreen>
                           ),
                         ],
                       ),
-                      // Total
                       Text(
                         _formatCurrency(order.totalAmount),
                         style: TextStyle(
@@ -331,8 +478,6 @@ class _RiwayatScreenState extends State<RiwayatScreen>
                       ),
                     ],
                   ),
-
-                  // Tombol pesan lagi (hanya untuk completed)
                   if (isCompleted) ...[
                     const SizedBox(height: 12),
                     SizedBox(

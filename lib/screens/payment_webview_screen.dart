@@ -9,11 +9,13 @@ import '../services/auth_service.dart';
 class PaymentWebViewScreen extends StatefulWidget {
   final String paymentUrl;
   final int orderId; // 0 = topup DikariPay
+  final bool isSubscription; // true = cek status ke /subscriptions/{id}
 
   const PaymentWebViewScreen({
     Key? key,
     required this.paymentUrl,
     required this.orderId,
+    this.isSubscription = false,
   }) : super(key: key);
 
   @override
@@ -54,7 +56,6 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
   }
 
   Future<void> _openBrowser() async {
-    // Simpan saldo awal sebelum buka browser (khusus topup)
     if (_isTopup) {
       try {
         final token = await const FlutterSecureStorage().read(
@@ -84,17 +85,13 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
       final scheme = uri.scheme.toLowerCase();
 
       if (scheme == 'http' || scheme == 'https') {
-        // URL biasa → buka di browser eksternal
         launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        // Deep link e-wallet (gojek://, dana://, shopee://, dll)
-        // → langsung open app, bukan browser
         launched = await launchUrl(
           uri,
           mode: LaunchMode.externalNonBrowserApplication,
         );
         if (!launched) {
-          // Fallback ke browser kalau app tidak ada
           launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
       }
@@ -103,7 +100,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
       if (launched) {
         setState(() {
           _browserOpened = true;
-          _hasChecked = false; // reset agar lifecycle bisa trigger check lagi
+          _hasChecked = false;
         });
       } else {
         _showSnackBar('Tidak bisa membuka halaman pembayaran.');
@@ -126,14 +123,17 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
         return;
       }
 
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      };
+
       if (_isTopup) {
+        // ─── Topup: cek saldo bertambah ──────────────────
         final response = await http
             .get(
               Uri.parse('${AuthService.baseUrl}/dikaripay/balance'),
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Accept': 'application/json',
-              },
+              headers: headers,
             )
             .timeout(const Duration(seconds: 5));
 
@@ -143,17 +143,36 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final newBalance = (data['balance'] as num).toDouble();
-          // Sukses hanya kalau saldo bertambah dari saldo awal
           _showResultDialog(newBalance > _initialBalance, isTopup: true);
         }
+      } else if (widget.isSubscription) {
+        // ─── Subscription: cek /subscriptions/{id} ───────
+        final response = await http
+            .get(
+              Uri.parse(
+                '${AuthService.baseUrl}/subscriptions/${widget.orderId}',
+              ),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (!mounted) return;
+        setState(() => _checking = false);
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final paymentStatus =
+              data['subscription']['payment_status'] as String?;
+          _showResultDialog(paymentStatus == 'paid', isTopup: false);
+        } else {
+          _showResultDialog(false, isTopup: false);
+        }
       } else {
+        // ─── Order biasa: cek /orders/{id} ───────────────
         final response = await http
             .get(
               Uri.parse('${AuthService.baseUrl}/orders/${widget.orderId}'),
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Accept': 'application/json',
-              },
+              headers: headers,
             )
             .timeout(const Duration(seconds: 5));
 
@@ -221,9 +240,10 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
+              // ← pop dengan nilai success agar caller tahu hasilnya
               onPressed: () {
-                Navigator.of(dialogContext).pop(); // tutup dialog
-                Navigator.of(dialogContext).pop(); // tutup payment screen
+                Navigator.of(dialogContext).pop();
+                Navigator.of(dialogContext).pop(success);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
@@ -233,9 +253,9 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text(
-                'Kembali ke Beranda',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              child: Text(
+                success ? 'Lanjut' : 'Kembali',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -256,14 +276,21 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
       appBar: AppBar(
-        title: Text(_isTopup ? 'Topup DikariPay' : 'Pembayaran'),
+        title: Text(
+          _isTopup
+              ? 'Topup DikariPay'
+              : widget.isSubscription
+              ? 'Pembayaran Langganan'
+              : 'Pembayaran',
+        ),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.onSurface,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).pop(),
+          // Pop false jika user back manual
+          onPressed: () => Navigator.of(context).pop(false),
         ),
       ),
       body: Center(

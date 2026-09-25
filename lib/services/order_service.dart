@@ -142,7 +142,9 @@ class OrderModel {
   final double subtotal;
   final double totalAmount;
   final String? notes;
+  final int? bpId;
   final String bpName;
+  final int? addressId;
   final Map<String, dynamic> phone;
   final Map<String, dynamic> address;
   final Map<String, dynamic>? originAddress;
@@ -178,7 +180,9 @@ class OrderModel {
     required this.subtotal,
     required this.totalAmount,
     this.notes,
+    this.bpId,
     required this.bpName,
+    this.addressId,
     required this.phone,
     required this.address,
     this.originAddress,
@@ -215,7 +219,9 @@ class OrderModel {
       subtotal: (json['subtotal'] as num).toDouble(),
       totalAmount: (json['total_amount'] as num).toDouble(),
       notes: json['notes'],
+      bpId: json['bp_id'],
       bpName: json['bp_name'] ?? '-',
+      addressId: json['address_id'],
       phone: Map<String, dynamic>.from(json['phone'] ?? {}),
       address: Map<String, dynamic>.from(json['address'] ?? {}),
       originAddress: json['origin_address'] != null
@@ -255,8 +261,7 @@ class OrderModel {
   bool get isPhase2 => isPerbaikan && perbaikanPhase == 'phase2';
   bool get isWaitingCustomerResponse => status == 'waiting_customer_response';
   bool get isPasangBaru => items.any(
-    (item) => // ← tambah
-        item['category'] == 'pasang_baru' || item['category'] == 'unit',
+    (item) => item['category'] == 'pasang_baru' || item['category'] == 'unit',
   );
   String get statusLabel {
     switch (status) {
@@ -307,12 +312,19 @@ class OrderService {
   };
 
   // ─── GET layanan ───────────────────────────────────────────
+  // addressId → layanan BP pemilik wilayah alamat tsb.
+  // bpId      → layanan BP tertentu (mis. pilih layanan fase 2 perbaikan).
+  // Tanpa keduanya → backend pakai alamat utama customer.
+  //
+  // Return: services, time_slots, available (bool), message (String?)
   Future<Map<String, dynamic>> getServices({
-    String? city,
+    int? addressId,
+    int? bpId,
     String? category,
   }) async {
     final params = <String, String>{};
-    if (city != null) params['city'] = city;
+    if (addressId != null) params['address_id'] = addressId.toString();
+    if (bpId != null) params['bp_id'] = bpId.toString();
     if (category != null) params['category'] = category;
 
     final uri = Uri.parse(
@@ -326,6 +338,8 @@ class OrderService {
             .map((e) => ServiceModel.fromJson(e))
             .toList(),
         'time_slots': List<String>.from(data['time_slots'] ?? []),
+        'available': data['available'] ?? true,
+        'message': data['message'],
       };
     }
     throw Exception(data['message'] ?? 'Gagal memuat layanan.');

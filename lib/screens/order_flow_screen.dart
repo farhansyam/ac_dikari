@@ -11,13 +11,13 @@ enum OrderType { cuciReguler, pasangBaru, beliPasang, relokasi, perbaikan }
 
 class OrderFlowScreen extends StatefulWidget {
   final OrderType orderType;
-  final String? categoryFilter; // ← tambah
-  final String? customTitle; // ← tambah
+  final String? categoryFilter;
+  final String? customTitle;
   const OrderFlowScreen({
     Key? key,
     this.orderType = OrderType.cuciReguler,
-    this.categoryFilter, // ← tambah
-    this.customTitle, // ← tambah
+    this.categoryFilter,
+    this.customTitle,
   }) : super(key: key);
   @override
   State<OrderFlowScreen> createState() => _OrderFlowScreenState();
@@ -53,6 +53,10 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
   ServiceModel? _selectedSurveyService;
   bool _loadingPerbaikan = false;
 
+  // Wilayah: layanan yang sudah dimuat berlaku untuk alamat mana
+  String? _servicesKey;
+  String? _unavailableMessage;
+
   // Step 3 — Keluhan (perbaikan)
   List<String> _selectedKeluhan = [];
   final _keluhanLainnyaController = TextEditingController();
@@ -82,6 +86,20 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
   bool get _isDiffLoc => _relocationType == 'different_location';
 
   int get _totalSteps => _isPerbaikan ? 4 : (_isRelokasi ? 4 : 3);
+
+  /// Alamat penentu BP / layanan.
+  /// Relokasi beda lokasi → alamat ASAL (bongkar). Selain itu → alamat order.
+  AddressModel? get _serviceAddress =>
+      (_isRelokasi && _isDiffLoc) ? _selectedOriginAddress : _selectedAddress;
+
+  /// Kunci cache layanan: berubah kalau alamat / tipe relokasi berubah.
+  String get _currentServicesKey =>
+      '${_serviceAddress?.id}|${_relocationType ?? '-'}';
+
+  String get _unavailableText =>
+      _unavailableMessage ??
+      'Maaf, layanan belum tersedia di wilayah '
+          '${_serviceAddress?.districtName ?? ''}, ${_serviceAddress?.cityName ?? 'Anda'}.';
 
   String get _screenTitle {
     if (widget.customTitle != null) return widget.customTitle!;
@@ -153,14 +171,15 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
       setState(() {
         _phones = phones;
         _addresses = addresses;
-        _selectedPhone = phones.firstWhere(
-          (p) => p.isPrimary,
-          orElse: () => phones.first,
-        );
-        _selectedAddress = addresses.firstWhere(
-          (a) => a.isPrimary,
-          orElse: () => addresses.first,
-        );
+        _selectedPhone = phones.isEmpty
+            ? null
+            : phones.firstWhere((p) => p.isPrimary, orElse: () => phones.first);
+        _selectedAddress = addresses.isEmpty
+            ? null
+            : addresses.firstWhere(
+                (a) => a.isPrimary,
+                orElse: () => addresses.first,
+              );
         _loadingStep1 = false;
       });
     } catch (_) {
@@ -170,12 +189,21 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
   }
 
   Future<void> _loadPerbaikanServices() async {
-    if (_selectedSurveyService != null) return;
-    setState(() => _loadingPerbaikan = true);
+    final address = _serviceAddress;
+    if (address == null) return;
+
+    // Sudah dimuat untuk alamat yang sama → tidak perlu muat ulang
+    if (_servicesKey == _currentServicesKey && _servicesJasa.isNotEmpty) return;
+
+    setState(() {
+      _loadingPerbaikan = true;
+      _servicesJasa = [];
+      _selectedSurveyService = null;
+      _unavailableMessage = null;
+    });
     try {
-      final city = _selectedAddress?.cityName;
       final result = await _orderService.getServices(
-        city: city,
+        addressId: address.id,
         category: 'service_perbaikan_survey',
       );
       final services = result['services'] as List<ServiceModel>;
@@ -184,6 +212,8 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
       setState(() {
         _servicesJasa = services;
         _timeSlots = slots;
+        _unavailableMessage = result['message'] as String?;
+        _servicesKey = _currentServicesKey;
         if (services.length == 1) _selectedSurveyService = services.first;
         _loadingPerbaikan = false;
       });
@@ -195,15 +225,35 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
   }
 
   Future<void> _loadStep2Data() async {
-    if (_servicesJasa.isNotEmpty) return;
-    setState(() => _loadingStep2 = true);
-    try {
-      final city = _selectedAddress?.cityName;
+    final address = _serviceAddress;
+    if (address == null) return;
 
+    // Sudah dimuat untuk alamat & tipe relokasi yang sama → tidak perlu muat ulang
+    if (_servicesKey == _currentServicesKey &&
+        (_servicesJasa.isNotEmpty || _servicesUnit.isNotEmpty)) {
+      return;
+    }
+
+    // Alamat berubah → layanan & pilihan lama (bisa dari BP lain) dibuang
+    setState(() {
+      _loadingStep2 = true;
+      _servicesJasa = [];
+      _servicesUnit = [];
+      _selectedItems = {};
+      _unavailableMessage = null;
+    });
+
+    try {
       if (_isRelokasi && _isDiffLoc) {
         final results = await Future.wait([
-          _orderService.getServices(city: city, category: 'relokasi_bongkar'),
-          _orderService.getServices(city: city, category: 'relokasi_pasang'),
+          _orderService.getServices(
+            addressId: address.id,
+            category: 'relokasi_bongkar',
+          ),
+          _orderService.getServices(
+            addressId: address.id,
+            category: 'relokasi_pasang',
+          ),
         ]);
         final bongkarServices = results[0]['services'] as List<ServiceModel>;
         final pasangServices = results[1]['services'] as List<ServiceModel>;
@@ -213,18 +263,20 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
         setState(() {
           _servicesJasa = [...bongkarServices, ...pasangServices];
           _timeSlots = timeSlots;
+          _unavailableMessage = results[0]['message'] as String?;
+          _servicesKey = _currentServicesKey;
           _loadingStep2 = false;
         });
         _autoSelectRelokasiServices(bongkarServices, pasangServices);
       } else {
         final jasaResult = await _orderService.getServices(
-          city: city,
+          addressId: address.id,
           category: _jasaCategory,
         );
         List<ServiceModel> unitServices = [];
         if (_isBeliPasang) {
           final unitResult = await _orderService.getServices(
-            city: city,
+            addressId: address.id,
             category: 'unit',
           );
           unitServices = unitResult['services'] as List<ServiceModel>;
@@ -234,6 +286,8 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
           _servicesJasa = jasaResult['services'] as List<ServiceModel>;
           _servicesUnit = unitServices;
           _timeSlots = jasaResult['time_slots'] as List<String>;
+          _unavailableMessage = jasaResult['message'] as String?;
+          _servicesKey = _currentServicesKey;
           _loadingStep2 = false;
         });
       }
@@ -298,7 +352,11 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
     // Step 1 perbaikan — pilih layanan survey
     if (_isPerbaikan && _currentStep == 1) {
       if (_selectedSurveyService == null) {
-        _showSnackBar('Pilih layanan survey terlebih dahulu.');
+        _showSnackBar(
+          _servicesJasa.isEmpty
+              ? _unavailableText
+              : 'Pilih layanan survey terlebih dahulu.',
+        );
         return;
       }
     }
@@ -314,6 +372,10 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
     // Step layanan — non-perbaikan
     final serviceStep = _isRelokasi ? 2 : 1;
     if (!_isPerbaikan && _currentStep == serviceStep) {
+      if (_servicesJasa.isEmpty && _servicesUnit.isEmpty) {
+        _showSnackBar(_unavailableText);
+        return;
+      }
       if (_selectedItems.isEmpty) {
         _showSnackBar('Pilih minimal satu layanan.');
         return;
@@ -621,7 +683,10 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
   void _showSnackBar(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+      SnackBar(
+        content: Text(msg.replaceFirst('Exception: ', '')),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -754,6 +819,55 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
           ],
         );
       }),
+    );
+  }
+
+  // ─── Empty state: layanan belum tersedia di wilayah ───────────
+
+  Widget _buildUnavailable() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.location_off_rounded,
+              size: 64,
+              color: Colors.grey.shade300,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Layanan Tidak Tersedia',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _unavailableText,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppTheme.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _prevStep,
+              icon: const Icon(Icons.edit_location_alt_rounded, size: 18),
+              label: const Text('Ganti Alamat'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                side: const BorderSide(color: AppTheme.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -971,7 +1085,8 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
           const SizedBox(height: 24),
           _buildSectionTitle('Alamat Asal (Lokasi Bongkar)'),
           Text(
-            'Pilih alamat di mana AC saat ini berada.',
+            'Pilih alamat di mana AC saat ini berada. '
+            'Alamat asal dan tujuan harus berada di wilayah layanan yang sama.',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: AppTheme.onSurfaceVariant),
@@ -1144,6 +1259,8 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    if (_servicesJasa.isEmpty) return _buildUnavailable();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1193,126 +1310,92 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
 
         _buildSectionTitle('Pilih Layanan Survey'),
 
-        if (_servicesJasa.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
+        ..._servicesJasa.map((service) {
+          final isSelected = _selectedSurveyService?.id == service.id;
+          return GestureDetector(
+            onTap: () => setState(() => _selectedSurveyService = service),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isSelected ? AppTheme.primary : Colors.grey.shade200,
+                  width: isSelected ? 2 : 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
                 children: [
-                  Icon(
-                    Icons.search_off_rounded,
-                    size: 64,
-                    color: Colors.grey.shade300,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Layanan Tidak Tersedia',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppTheme.primary : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primary
+                            : Colors.grey.shade400,
+                        width: 2,
+                      ),
                     ),
+                    child: isSelected
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                            size: 14,
+                          )
+                        : null,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Maaf, layanan belum tersedia di kota ${_selectedAddress?.cityName ?? 'Anda'}.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.onSurfaceVariant,
-                      height: 1.5,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          service.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (service.description.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            service.description,
+                            style: TextStyle(
+                              color: AppTheme.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        Text(
+                          _formatCurrency(service.finalPrice),
+                          style: TextStyle(
+                            color: AppTheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          )
-        else
-          ..._servicesJasa.map((service) {
-            final isSelected = _selectedSurveyService?.id == service.id;
-            return GestureDetector(
-              onTap: () => setState(() => _selectedSurveyService = service),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isSelected ? AppTheme.primary : Colors.grey.shade200,
-                    width: isSelected ? 2 : 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppTheme.primary
-                            : Colors.transparent,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isSelected
-                              ? AppTheme.primary
-                              : Colors.grey.shade400,
-                          width: 2,
-                        ),
-                      ),
-                      child: isSelected
-                          ? const Icon(
-                              Icons.check_rounded,
-                              color: Colors.white,
-                              size: 14,
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            service.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          if (service.description.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              service.description,
-                              style: TextStyle(
-                                color: AppTheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 6),
-                          Text(
-                            _formatCurrency(service.finalPrice),
-                            style: TextStyle(
-                              color: AppTheme.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
+          );
+        }),
       ],
     );
   }
@@ -1521,39 +1604,7 @@ class _OrderFlowScreenState extends State<OrderFlowScreen> {
   Widget _buildStep2() {
     if (_loadingStep2) return const Center(child: CircularProgressIndicator());
     final allEmpty = _servicesJasa.isEmpty && _servicesUnit.isEmpty;
-    if (allEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.search_off_rounded,
-                size: 64,
-                color: Colors.grey.shade300,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Layanan Tidak Tersedia',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Maaf, layanan belum tersedia di kota ${_selectedAddress?.cityName ?? 'Anda'}.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppTheme.onSurfaceVariant,
-                  height: 1.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    if (allEmpty) return _buildUnavailable();
 
     final bongkarServices = _isRelokasi && _isDiffLoc
         ? _servicesJasa.where((s) => s.category == 'relokasi_bongkar').toList()

@@ -45,7 +45,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           final result = await _orderService.getSurveyReport(order.id);
           report = result['report'] as SurveyReportModel;
         } catch (e) {
-          debugPrint('=== getSurveyReport ERROR: $e'); // ← tambah
+          debugPrint('=== getSurveyReport ERROR: $e');
         }
       }
 
@@ -226,10 +226,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         ? 'cuci_reguler'
         : 'service_perbaikan_service';
 
-    // Load services fase 2
+    // Load services fase 2 — hanya dari BP yang menangani order ini
     List<ServiceModel> services = [];
     try {
-      final result = await _orderService.getServices(category: category);
+      final result = await _orderService.getServices(
+        category: category,
+        bpId: _order?.bpId,
+      );
       services = result['services'] as List<ServiceModel>;
     } catch (e) {
       _showSnackBar('Gagal memuat layanan: $e');
@@ -391,8 +394,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       ),
     );
 
-    // GANTI bagian ini (dari "if (selected == null) return;" sampai akhir method):
-
     if (selected == null) return;
 
     setState(() => _respondingSurvey = true);
@@ -425,7 +426,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   void _showSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      SnackBar(
+        content: Text(message.replaceFirst('Exception: ', '')),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -796,9 +800,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
-                // GANTI
-
-                // JADI — cek category item
                 if (order.isPhase2 &&
                     order.items.any(
                       (i) => i['category'] == 'service_perbaikan_service',
